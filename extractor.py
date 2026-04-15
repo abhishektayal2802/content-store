@@ -40,10 +40,10 @@ class Extractor:
         async for pdf_path in iter_queue(pdf_queue):
             pages = await self._split_new(pdf_path, done)
             reporter.grow("extract", len(pages))
-            tasks.extend(
-                self._extract_one(meta, page_bytes, page_queue, reporter)
-                for meta, page_bytes in pages
-            )
+            for meta, page_bytes in pages:
+                tasks.append(asyncio.create_task(
+                    self._extract_one(meta, page_bytes, page_queue, reporter)
+                ))
 
         await asyncio.gather(*tasks)
         await page_queue.put(None)
