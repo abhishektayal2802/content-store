@@ -58,4 +58,4 @@ GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 # --- Pipeline constants ---
 
-QUEUE_SIZE: int = 256
+QUEUE_SIZE: int = 64
