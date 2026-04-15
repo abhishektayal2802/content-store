@@ -20,7 +20,7 @@ StoreKind = Literal[
 ]
 
 # Progress reporter: pipeline stage labels for bars and error rows.
-Stage = Literal["scrape", "extract", "persist"]
+Stage = Literal["scrape", "extract", "persist", "index"]
 
 # --- Scraper types ---
 
@@ -32,7 +32,7 @@ class Book(BaseModel):
     subject: str
     title: str
     code: str
-    chapter_count: int
+    book_url: str
 
 
 class Asset(BaseModel):
@@ -104,6 +104,13 @@ class ExtractionSlice(BaseModel):
 
 
 # --- Persister types ---
+
+
+class PendingIndex(BaseModel):
+    """An upload operation pending indexing (File Search long-running op)."""
+
+    name: str
+    operation: types.UploadToFileSearchStoreOperation
 
 
 class Document(BaseModel):

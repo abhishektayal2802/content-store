@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin
@@ -16,9 +17,10 @@ from .constants import (
     BOOK_GROUP_PATTERN,
     BOOK_OPTION_PATTERN,
     CATALOG_URL,
-    EXTRA_SUFFIXES,
     INPUTS_ROOT,
     NCERT_BASE,
+    SCRAPE_CONCURRENCY,
+    SUFFIX_PATTERN,
     USER_AGENT,
 )
 from .reporter import ProgressReporter
@@ -30,6 +32,7 @@ class Scraper:
 
     def __init__(self) -> None:
         self._client = create_client(headers={"User-Agent": USER_AGENT})
+        self._semaphore = asyncio.Semaphore(SCRAPE_CONCURRENCY)
 
     async def run(
         self,
@@ -44,7 +47,10 @@ class Scraper:
             await pdf_queue.put(None)
             return
 
-        assets = [a for book in books for a in self._build_assets(book)]
+        # Discover assets concurrently from per-book pages.
+        asset_lists = await asyncio.gather(*(self._build_assets(b) for b in books))
+        assets = [a for assets in asset_lists for a in assets]
+
         reporter.grow("scrape", len(assets))
         await self._download_all(assets, pdf_queue, reporter)
         await pdf_queue.put(None)
@@ -71,14 +77,14 @@ class Scraper:
             title = option.group(2).strip()
             code = option.group(3).strip()
             range_val = option.group(4).strip()
-            chapter_count = int(range_val.split("-")[-1])
+            book_url = urljoin(NCERT_BASE, f"textbook.php?{code}={range_val}")
             books.append(
                 Book(
                     grade=grade,
                     subject=subject,
                     title=title,
                     code=code,
-                    chapter_count=chapter_count,
+                    book_url=book_url,
                 )
             )
         return books
@@ -91,18 +97,38 @@ class Scraper:
             and book.code[1] == "e"
         )
 
-    # --- Asset building ---
+    # --- Asset discovery ---
 
-    def _build_assets(self, book: Book) -> list[Asset]:
-        assets: list[Asset] = []
+    async def _fetch_book_suffixes(self, book: Book) -> list[str]:
+        """Fetch per-book page and extract all suffix values from JavaScript."""
+        html = await get_text(book.book_url, client=self._client)
+        return SUFFIX_PATTERN.findall(html)
 
-        for n in range(1, book.chapter_count + 1):
-            assets.append(self._pdf_asset(book, f"chapter-{n:02d}.pdf", f"{n:02d}"))
+    def _suffix_to_filename(self, suffix: str) -> Optional[str]:
+        """Convert suffix to filename, or None if not a recognized asset type."""
+        if re.fullmatch(r"\d{2}", suffix):
+            return f"chapter-{suffix}.pdf"
+        if suffix == "ps":
+            return "prelims.pdf"
+        if suffix == "an":
+            return "answers.pdf"
+        if m := re.fullmatch(r"a(\d+)", suffix):
+            return f"appendix-{int(m.group(1)):02d}.pdf"
+        if m := re.fullmatch(r"ax(\d*)", suffix):
+            num = f"-{int(m.group(1)):02d}" if m.group(1) else ""
+            return f"annexure{num}.pdf"
+        if suffix in ("gl", "glo"):
+            return "glossary.pdf"
+        return None
 
-        for filename, suffix in EXTRA_SUFFIXES:
-            assets.append(self._pdf_asset(book, filename, suffix))
-
-        return assets
+    async def _build_assets(self, book: Book) -> list[Asset]:
+        """Discover assets by parsing the per-book page."""
+        suffixes = await self._fetch_book_suffixes(book)
+        return [
+            self._pdf_asset(book, filename, suffix)
+            for suffix in suffixes
+            if (filename := self._suffix_to_filename(suffix))
+        ]
 
     def _pdf_asset(self, book: Book, filename: str, suffix: str) -> Asset:
         url = urljoin(NCERT_BASE, f"textbook/pdf/{book.code}{suffix}.pdf")
@@ -132,11 +158,11 @@ class Scraper:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            content = await get_bytes(asset.url, client=self._client)
-            if content is not None:
-                await asyncio.to_thread(path.write_bytes, content)
-                await pdf_queue.put(path)
-                reporter.advance("scrape")
+            async with self._semaphore:
+                content = await get_bytes(asset.url, client=self._client)
+            await asyncio.to_thread(path.write_bytes, content)
+            await pdf_queue.put(path)
+            reporter.advance("scrape")
         except Exception as e:
             reporter.record_error("scrape", asset.url, e)
 

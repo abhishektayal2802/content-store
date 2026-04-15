@@ -12,6 +12,7 @@ INPUTS_ROOT: Path = Path(__file__).parent / "inputs"
 NCERT_BASE = "https://ncert.nic.in/"
 CATALOG_URL = f"{NCERT_BASE}textbook.php"
 USER_AGENT = "Mozilla/5.0 (compatible; sujho-content-store/1.0)"
+SCRAPE_CONCURRENCY: int = 6
 
 ALLOWED_GRADES = {9, 10, 11, 12}
 ALLOWED_SUBJECTS = {
@@ -44,13 +45,8 @@ BOOK_OPTION_PATTERN = re.compile(
     re.S,
 )
 
-EXTRA_SUFFIXES = [
-    ("prelims.pdf", "ps"),
-    ("answers.pdf", "an"),
-    ("appendix.pdf", "a1"),
-    ("appendix-01.pdf", "a1"),
-    ("appendix-02.pdf", "a2"),
-]
+# Regex to extract suffix values from per-book page JavaScript.
+SUFFIX_PATTERN = re.compile(r'textbook\.php\?\w+=(\w+)"')
 
 # --- Extractor constants ---
 
@@ -59,3 +55,6 @@ GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 # --- Pipeline constants ---
 
 QUEUE_SIZE: int = 64
+
+# Seconds between polls while waiting for File Search indexing to complete.
+INDEX_POLL_INTERVAL: float = 5.0

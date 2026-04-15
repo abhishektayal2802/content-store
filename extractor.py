@@ -96,16 +96,16 @@ class Extractor:
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
         reporter: ProgressReporter,
     ) -> None:
-        """Extract one page, enqueue result, advance progress."""
+        """Extract one page, enqueue result, advance progress on success."""
         upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
         try:
             extraction = await self._run_slices(upload.uri)
             await page_queue.put(ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction))
+            reporter.advance("extract")
         except Exception as e:
             reporter.record_error("extract", meta.page_key, e)
         finally:
             await self._files.delete_file(upload)
-            reporter.advance("extract")
 
     async def _run_slices(self, uri: str) -> PageExtraction:
         """Run all extraction slices in parallel and merge results."""

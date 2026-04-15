@@ -11,7 +11,7 @@ from infra.llm import GeminiFilesClient, GeminiRuntime
 from .prompts import STORE_FIELDS, STORE_KINDS
 from .queues import iter_queue
 from .reporter import ProgressReporter
-from .types import Document, ExtractedPage, StoreKind
+from .types import Document, ExtractedPage, PendingIndex, StoreKind
 
 
 class Persister:
@@ -32,6 +32,7 @@ class Persister:
         self,
         stores: dict[StoreKind, str],
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
+        op_queue: asyncio.Queue[Optional[PendingIndex]],
         reporter: ProgressReporter,
     ) -> None:
         """Consume pages from queue, build documents, upload."""
@@ -40,10 +41,11 @@ class Persister:
             docs = self._build_documents(page)
             reporter.grow("persist", len(docs))
             tasks.append(asyncio.create_task(
-                self._upload_all(stores, docs, reporter)
+                self._upload_all(stores, docs, op_queue, reporter)
             ))
 
         await asyncio.gather(*tasks)
+        await op_queue.put(None)
 
     # --- Store management ---
 
@@ -55,7 +57,7 @@ class Persister:
         """List page_keys that are already in the pages store."""
         docs = await self._files.list_documents_full(pages_store)
         return {
-            doc.display_name.removeprefix("pages__")
+            doc.display_name.removeprefix("pages__").removesuffix(".pdf")
             for doc in docs
             if doc.display_name
         }
@@ -92,20 +94,22 @@ class Persister:
         self,
         stores: dict[StoreKind, str],
         docs: list[Document],
+        op_queue: asyncio.Queue[Optional[PendingIndex]],
         reporter: ProgressReporter,
     ) -> None:
         """Upload all documents for one page concurrently."""
 
         async def _upload(doc: Document) -> None:
-            """Upload one document and advance progress."""
+            """Upload one document and advance progress on success."""
             try:
-                await self._files.store_bytes(
+                operation = await self._files.store_bytes(
                     store_name=stores[doc.store],
                     data=doc.content,
                     config=doc.upload_config(),
-                )
+                )                
+                await op_queue.put(PendingIndex(name=doc.name, operation=operation))
+                reporter.advance("persist")
             except Exception as e:
                 reporter.record_error("persist", doc.name, e)
-            reporter.advance("persist")
 
         await asyncio.gather(*(_upload(d) for d in docs))
