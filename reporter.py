@@ -41,9 +41,9 @@ class ProgressReporter:
         """Context manager that starts/stops progress display and prints summary."""
         try:
             with self._progress:
-                self._tasks["scrape"] = self._progress.add_task("Scraping", total=None)
-                self._tasks["extract"] = self._progress.add_task("Extracting", total=None)
-                self._tasks["persist"] = self._progress.add_task("Persisting", total=None)
+                self._tasks["scrape"] = self._progress.add_task("Scraping PDFs", total=None)
+                self._tasks["extract"] = self._progress.add_task("Extracting pages", total=None)
+                self._tasks["persist"] = self._progress.add_task("Persisting artefacts", total=None)
                 yield self
         finally:
             self._print_summary()

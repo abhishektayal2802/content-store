@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional, Type
+from typing import Optional
 
 import pymupdf
-from pydantic import BaseModel
 
 from infra.content import PageExtraction
 from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime
 from infra.llm.types import InteractionTurn, UriMediaContent
 
 from .constants import GEMINI_MODEL
-from .prompts import EXTRACTION_SLICES
+from .prompts import EXTRACTION_PROMPT
 from .queues import iter_queue
 from .reporter import ProgressReporter
 from .types import ExtractedPage, PageMeta
@@ -94,44 +93,21 @@ class Extractor:
         pdf_bytes: bytes,
         reporter: ProgressReporter,
     ) -> Optional[ExtractedPage]:
-        """Extract LLM content from a single page PDF using parallel calls."""
+        """Extract all content from a single page PDF in one LLM call."""
+        upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
         try:
-            upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
-        except Exception as e:
-            reporter.record_error("extract", meta.page_key, e)
-            return None
-
-        try:
-            partials = await asyncio.gather(
-                *(self._extract_slice(upload.uri, s.prompt, s.response)
-                  for s in EXTRACTION_SLICES)
+            extraction, _ = await self._interactions.chat(
+                model=GEMINI_MODEL,
+                system_instruction=EXTRACTION_PROMPT,
+                input=[InteractionTurn(
+                    role="user",
+                    content=[UriMediaContent(type="document", uri=upload.uri, mime_type="application/pdf")],
+                )],
+                response_schema=PageExtraction,
             )
-            merged: dict[str, object] = {}
-            for partial in partials:
-                merged.update(partial.model_dump())
-            return ExtractedPage(
-                meta=meta, pdf_bytes=pdf_bytes, extraction=PageExtraction(**merged),
-            )
+            return ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction)
         except Exception as e:
             reporter.record_error("extract", meta.page_key, e)
             return None
         finally:
             await self._files.delete_file(upload)
-
-    async def _extract_slice[T: BaseModel](
-        self,
-        uri: str,
-        prompt: str,
-        schema: Type[T],
-    ) -> T:
-        """Run one typed extraction call for a single category."""
-        parsed, _ = await self._interactions.chat(
-            model=GEMINI_MODEL,
-            system_instruction=prompt,
-            input=[InteractionTurn(
-                role="user",
-                content=[UriMediaContent(type="document", uri=uri, mime_type="application/pdf")],
-            )],
-            response_schema=schema,
-        )
-        return parsed

@@ -1,9 +1,9 @@
 """Shared types for the content_store pipeline."""
 
-from typing import Literal, Type
+from typing import Literal
 
 from google.genai import types
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from infra.content import PageExtraction
 
@@ -79,29 +79,6 @@ class ExtractedPage(BaseModel):
     meta: PageMeta
     pdf_bytes: bytes
     extraction: PageExtraction
-
-
-class ExtractionSlice(BaseModel):
-    """One extraction category: field name, description, and Pydantic schema."""
-
-    model_config = ConfigDict(frozen=True)
-
-    field: str
-    description: str
-    response: Type[BaseModel]
-
-    @property
-    def prompt(self) -> str:
-        """Build the full extraction prompt for this slice."""
-        from infra.prompts import join_sections
-
-        rules = join_sections(
-            "Rules:",
-            "- Extract only what is explicitly present on the page.\n"
-            "- Do not invent, infer, merge, or normalize away important details.\n"
-            "- If nothing is found, return an empty list.",
-        )
-        return join_sections(self.description, rules)
 
 
 # --- Persister types ---

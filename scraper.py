@@ -136,10 +136,9 @@ class Scraper:
             if content is not None:
                 await asyncio.to_thread(path.write_bytes, content)
                 await pdf_queue.put(path)
+                reporter.advance("scrape")
         except Exception as e:
             reporter.record_error("scrape", asset.url, e)
-
-        reporter.advance("scrape")
 
     def _output_path(self, asset: Asset) -> Path:
         return (
