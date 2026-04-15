@@ -8,7 +8,7 @@ from typing import Optional
 from infra.content import ContentMarkdownRenderer
 from infra.llm import GeminiFilesClient, GeminiRuntime
 
-from .prompts import EXTRACTION_SLICES, STORE_KINDS
+from .prompts import STORE_FIELDS, STORE_KINDS
 from .queues import iter_queue
 from .reporter import ProgressReporter
 from .types import Document, ExtractedPage, StoreKind
@@ -58,7 +58,7 @@ class Persister:
     # --- Document building ---
 
     def _build_documents(self, page: ExtractedPage) -> list[Document]:
-        """Build the page PDF document plus one markdown doc per extraction slice."""
+        """Build the page PDF document plus one markdown doc per extraction field."""
         docs: list[Document] = [
             Document(
                 store="pages",
@@ -69,11 +69,11 @@ class Persister:
             )
         ]
 
-        for s in EXTRACTION_SLICES:
-            for i, item in enumerate(getattr(page.extraction, s.field), 1):
+        for field in STORE_FIELDS:
+            for i, item in enumerate(getattr(page.extraction, field), 1):
                 docs.append(Document(
-                    store=s.field,
-                    name=f"{page.meta.display_name(s.field)}__item-{i:03d}.md",
+                    store=field,
+                    name=f"{page.meta.display_name(field)}__item-{i:03d}.md",
                     content=self._renderer.render(item).encode("utf-8"),
                     mime="text/markdown",
                     meta=page.meta,

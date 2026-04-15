@@ -82,11 +82,10 @@ class ExtractedPage(BaseModel):
 
 
 class ExtractionSlice(BaseModel):
-    """One extraction category: field name, description, and Pydantic schema."""
+    """One extraction slice: description and Pydantic response schema."""
 
     model_config = ConfigDict(frozen=True)
 
-    field: str
     description: str
     response: Type[BaseModel]
 
@@ -99,7 +98,7 @@ class ExtractionSlice(BaseModel):
             "Rules:",
             "- Extract only what is explicitly present on the page.\n"
             "- Do not invent, infer, merge, or normalize away important details.\n"
-            "- If nothing is found, return an empty list.",
+            "- If nothing is found, return empty lists.",
         )
         return join_sections(self.description, rules)
 
