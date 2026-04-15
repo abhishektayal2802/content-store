@@ -1,0 +1,7 @@
+# Install from the monorepo root:
+# python3 -m pip install -r content_store/requirements.txt
+
+-e ./infra
+python-dotenv
+rich
+pymupdf

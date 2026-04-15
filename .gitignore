@@ -1,0 +1,10 @@
+# Downloaded PDFs (large; local cache only)
+inputs/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.DS_Store
