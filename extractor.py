@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Type
 
 import pymupdf
+from pydantic import BaseModel
 
 from infra.content import PageExtraction
 from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime
 from infra.llm.types import InteractionTurn, UriMediaContent
 
 from .constants import GEMINI_MODEL
-from .prompts import EXTRACTION_PROMPT
+from .prompts import EXTRACTION_SLICES
 from .queues import iter_queue
 from .reporter import ProgressReporter
 from .types import ExtractedPage, PageMeta
@@ -35,15 +36,16 @@ class Extractor:
         reporter: ProgressReporter,
     ) -> None:
         """Consume PDFs from queue, extract new pages, push to page queue."""
+        tasks = []
         async for pdf_path in iter_queue(pdf_queue):
             pages = await self._split_new(pdf_path, done)
             reporter.grow("extract", len(pages))
-            for meta, page_bytes in pages:
-                extracted = await self._extract_one(meta, page_bytes, reporter)
-                if extracted is not None:
-                    await page_queue.put(extracted)
-                reporter.advance("extract")
+            tasks.extend(
+                self._extract_one(meta, page_bytes, page_queue, reporter)
+                for meta, page_bytes in pages
+            )
 
+        await asyncio.gather(*tasks)
         await page_queue.put(None)
 
     # --- PDF splitting ---
@@ -91,23 +93,41 @@ class Extractor:
         self,
         meta: PageMeta,
         pdf_bytes: bytes,
+        page_queue: asyncio.Queue[Optional[ExtractedPage]],
         reporter: ProgressReporter,
-    ) -> Optional[ExtractedPage]:
-        """Extract all content from a single page PDF in one LLM call."""
+    ) -> None:
+        """Extract one page, enqueue result, advance progress."""
         upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
         try:
-            extraction, _ = await self._interactions.chat(
-                model=GEMINI_MODEL,
-                system_instruction=EXTRACTION_PROMPT,
-                input=[InteractionTurn(
-                    role="user",
-                    content=[UriMediaContent(type="document", uri=upload.uri, mime_type="application/pdf")],
-                )],
-                response_schema=PageExtraction,
-            )
-            return ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction)
+            extraction = await self._run_slices(upload.uri)
+            await page_queue.put(ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction))
         except Exception as e:
             reporter.record_error("extract", meta.page_key, e)
-            return None
         finally:
             await self._files.delete_file(upload)
+            reporter.advance("extract")
+
+    async def _run_slices(self, uri: str) -> PageExtraction:
+        """Run all extraction slices in parallel and merge results."""
+        partials = await asyncio.gather(
+            *(self._extract_slice(uri, s.prompt, s.response) for s in EXTRACTION_SLICES)
+        )
+        return PageExtraction(**{k: v for p in partials for k, v in p.model_dump().items()})
+
+    async def _extract_slice[T: BaseModel](
+        self,
+        uri: str,
+        prompt: str,
+        schema: Type[T],
+    ) -> T:
+        """Run one typed extraction call for a single category."""
+        parsed, _ = await self._interactions.chat(
+            model=GEMINI_MODEL,
+            system_instruction=prompt,
+            input=[InteractionTurn(
+                role="user",
+                content=[UriMediaContent(type="document", uri=uri, mime_type="application/pdf")],
+            )],
+            response_schema=schema,
+        )
+        return parsed
