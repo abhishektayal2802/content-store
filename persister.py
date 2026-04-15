@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from rich.progress import Progress, TaskID
-
 from infra.content import ContentMarkdownRenderer
 from infra.llm import GeminiFilesClient, GeminiRuntime
 
 from .prompts import EXTRACTION_SLICES, STORE_KINDS
-from .queues import grow_total, iter_queue
+from .queues import iter_queue
+from .reporter import ProgressReporter
 from .types import Document, ExtractedPage, StoreKind
 
 
@@ -33,14 +32,13 @@ class Persister:
         self,
         stores: dict[StoreKind, str],
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Consume pages from queue, build documents, upload."""
         async for page in iter_queue(page_queue):
             docs = self._build_documents(page)
-            grow_total(progress, task, len(docs))
-            await self._upload_all(stores, docs, progress, task)
+            reporter.grow("persist", len(docs))
+            await self._upload_all(stores, docs, reporter)
 
     # --- Store management ---
 
@@ -89,18 +87,20 @@ class Persister:
         self,
         stores: dict[StoreKind, str],
         docs: list[Document],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Upload all documents for one page concurrently."""
 
         async def _upload(doc: Document) -> None:
             """Upload one document and advance progress."""
-            await self._files.store_bytes(
-                store_name=stores[doc.store],
-                data=doc.content,
-                config=doc.upload_config(),
-            )
-            progress.advance(task)
+            try:
+                await self._files.store_bytes(
+                    store_name=stores[doc.store],
+                    data=doc.content,
+                    config=doc.upload_config(),
+                )
+            except Exception as e:
+                reporter.record_error("persist", doc.name, e)
+            reporter.advance("persist")
 
         await asyncio.gather(*(_upload(d) for d in docs))

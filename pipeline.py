@@ -6,13 +6,12 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-
 from infra.llm import GeminiRuntime
 
 from .constants import QUEUE_SIZE
 from .extractor import Extractor
 from .persister import Persister
+from .reporter import ProgressReporter
 from .scraper import Scraper
 from .types import ExtractedPage
 
@@ -33,33 +32,15 @@ class Pipeline:
     async def run(self) -> None:
         """Run the streaming pipeline with concurrent workers."""
         stores, done = await self._persister.setup()
+        reporter = ProgressReporter()
 
         try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TextColumn("{task.completed}/{task.total}"),
-                TimeElapsedColumn(),
-            ) as progress:
-                scrape_task = progress.add_task("Scraping", total=None)
-                extract_task = progress.add_task("Extracting", total=None)
-                persist_task = progress.add_task("Persisting", total=None)
-
+            with reporter.live():
                 async with asyncio.TaskGroup() as tg:
+                    tg.create_task(self._scraper.run(self._pdf_queue, reporter))
                     tg.create_task(
-                        self._scraper.run(self._pdf_queue, progress, scrape_task)
+                        self._extractor.run(self._pdf_queue, self._page_queue, done, reporter)
                     )
-                    tg.create_task(
-                        self._extractor.run(
-                            self._pdf_queue, self._page_queue, done, progress, extract_task
-                        )
-                    )
-                    tg.create_task(
-                        self._persister.run(
-                            stores, self._page_queue, progress, persist_task
-                        )
-                    )
+                    tg.create_task(self._persister.run(stores, self._page_queue, reporter))
         finally:
             await self._scraper.close()

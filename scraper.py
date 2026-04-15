@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin
 
-from rich.progress import Progress, TaskID
-
 from infra.http import create_client, get_bytes, get_text
 from infra.text import slugify
 
@@ -23,6 +21,7 @@ from .constants import (
     NCERT_BASE,
     USER_AGENT,
 )
+from .reporter import ProgressReporter
 from .types import Asset, Book
 
 
@@ -35,8 +34,7 @@ class Scraper:
     async def run(
         self,
         pdf_queue: asyncio.Queue[Optional[Path]],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Fetch catalog, filter books, download PDFs, push paths to queue."""
         catalog_html = await get_text(CATALOG_URL, client=self._client)
@@ -47,8 +45,8 @@ class Scraper:
             return
 
         assets = [a for book in books for a in self._build_assets(book)]
-        progress.update(task, total=len(assets))
-        await self._download_all(assets, pdf_queue, progress, task)
+        reporter.grow("scrape", len(assets))
+        await self._download_all(assets, pdf_queue, reporter)
         await pdf_queue.put(None)
 
     async def close(self) -> None:
@@ -116,29 +114,32 @@ class Scraper:
         self,
         assets: list[Asset],
         pdf_queue: asyncio.Queue[Optional[Path]],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Download all assets concurrently, pushing paths to queue."""
         await asyncio.gather(
-            *(self._download_one(a, pdf_queue, progress, task) for a in assets)
+            *(self._download_one(a, pdf_queue, reporter) for a in assets)
         )
 
     async def _download_one(
         self,
         asset: Asset,
         pdf_queue: asyncio.Queue[Optional[Path]],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Download one PDF, push path to queue if successful."""
         path = self._output_path(asset)
         path.parent.mkdir(parents=True, exist_ok=True)
-        content = await get_bytes(asset.url, client=self._client)
-        if content is not None:
-            await asyncio.to_thread(path.write_bytes, content)
-            await pdf_queue.put(path)
-        progress.advance(task)
+
+        try:
+            content = await get_bytes(asset.url, client=self._client)
+            if content is not None:
+                await asyncio.to_thread(path.write_bytes, content)
+                await pdf_queue.put(path)
+        except Exception as e:
+            reporter.record_error("scrape", asset.url, e)
+
+        reporter.advance("scrape")
 
     def _output_path(self, asset: Asset) -> Path:
         return (

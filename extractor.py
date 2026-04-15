@@ -8,7 +8,6 @@ from typing import Optional, Type
 
 import pymupdf
 from pydantic import BaseModel
-from rich.progress import Progress, TaskID
 
 from infra.content import PageExtraction
 from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime
@@ -16,7 +15,8 @@ from infra.llm.types import InteractionTurn, UriMediaContent
 
 from .constants import GEMINI_MODEL
 from .prompts import EXTRACTION_SLICES
-from .queues import grow_total, iter_queue
+from .queues import iter_queue
+from .reporter import ProgressReporter
 from .types import ExtractedPage, PageMeta
 
 
@@ -33,16 +33,17 @@ class Extractor:
         pdf_queue: asyncio.Queue[Optional[Path]],
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
         done: set[str],
-        progress: Progress,
-        task: TaskID,
+        reporter: ProgressReporter,
     ) -> None:
         """Consume PDFs from queue, extract new pages, push to page queue."""
         async for pdf_path in iter_queue(pdf_queue):
             pages = await self._split_new(pdf_path, done)
-            grow_total(progress, task, len(pages) * len(EXTRACTION_SLICES))
+            reporter.grow("extract", len(pages))
             for meta, page_bytes in pages:
-                extracted = await self._extract_one(meta, page_bytes, progress, task)
-                await page_queue.put(extracted)
+                extracted = await self._extract_one(meta, page_bytes, reporter)
+                if extracted is not None:
+                    await page_queue.put(extracted)
+                reporter.advance("extract")
 
         await page_queue.put(None)
 
@@ -91,14 +92,18 @@ class Extractor:
         self,
         meta: PageMeta,
         pdf_bytes: bytes,
-        progress: Progress,
-        task: TaskID,
-    ) -> ExtractedPage:
+        reporter: ProgressReporter,
+    ) -> Optional[ExtractedPage]:
         """Extract LLM content from a single page PDF using parallel calls."""
-        upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
+        try:
+            upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
+        except Exception as e:
+            reporter.record_error("extract", meta.page_key, e)
+            return None
+
         try:
             partials = await asyncio.gather(
-                *(self._extract_slice(upload.uri, s.prompt, s.response, progress, task)
+                *(self._extract_slice(upload.uri, s.prompt, s.response)
                   for s in EXTRACTION_SLICES)
             )
             merged: dict[str, object] = {}
@@ -107,6 +112,9 @@ class Extractor:
             return ExtractedPage(
                 meta=meta, pdf_bytes=pdf_bytes, extraction=PageExtraction(**merged),
             )
+        except Exception as e:
+            reporter.record_error("extract", meta.page_key, e)
+            return None
         finally:
             await self._files.delete_file(upload)
 
@@ -115,8 +123,6 @@ class Extractor:
         uri: str,
         prompt: str,
         schema: Type[T],
-        progress: Progress,
-        task: TaskID,
     ) -> T:
         """Run one typed extraction call for a single category."""
         parsed, _ = await self._interactions.chat(
@@ -128,5 +134,4 @@ class Extractor:
             )],
             response_schema=schema,
         )
-        progress.advance(task)
         return parsed

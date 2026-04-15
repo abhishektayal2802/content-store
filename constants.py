@@ -54,8 +54,8 @@ EXTRA_SUFFIXES = [
 
 # --- Extractor constants ---
 
-GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 # --- Pipeline constants ---
 
-QUEUE_SIZE: int = 128
+QUEUE_SIZE: int = 256

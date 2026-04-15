@@ -19,6 +19,9 @@ StoreKind = Literal[
     "definitions",
 ]
 
+# Progress reporter: pipeline stage labels for bars and error rows.
+Stage = Literal["scrape", "extract", "persist"]
+
 # --- Scraper types ---
 
 
