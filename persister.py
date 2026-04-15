@@ -35,10 +35,15 @@ class Persister:
         reporter: ProgressReporter,
     ) -> None:
         """Consume pages from queue, build documents, upload."""
+        tasks = []
         async for page in iter_queue(page_queue):
             docs = self._build_documents(page)
             reporter.grow("persist", len(docs))
-            await self._upload_all(stores, docs, reporter)
+            tasks.append(asyncio.create_task(
+                self._upload_all(stores, docs, reporter)
+            ))
+
+        await asyncio.gather(*tasks)
 
     # --- Store management ---
 
