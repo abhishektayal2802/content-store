@@ -5,13 +5,39 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from infra.content import ContentMarkdownRenderer
+from google.genai import types
+
+from infra.content import (
+    ContentMarkdownRenderer,
+    Document,
+    ExtractedPage,
+    PendingIndex,
+    QUESTION_STORES,
+    StoreKind,
+)
 from infra.llm import GeminiFilesClient, GeminiRuntime
 
 from .prompts import STORE_FIELDS, STORE_KINDS
 from .queues import iter_queue
 from .reporter import ProgressReporter
-from .types import Document, ExtractedPage, PendingIndex, StoreKind
+
+
+def _upload_config(doc: Document) -> types.UploadToFileSearchStoreConfig:
+    """Build the Google SDK upload config for a document."""
+    metadata = [
+        types.CustomMetadata(key="grade", numeric_value=doc.meta.grade),
+        types.CustomMetadata(key="subject", string_value=doc.meta.subject),
+        types.CustomMetadata(key="book", string_value=doc.meta.book),
+        types.CustomMetadata(key="chapter", string_value=doc.meta.chapter),
+        types.CustomMetadata(key="page", numeric_value=doc.meta.page),
+    ]
+    if doc.difficulty:
+        metadata.append(types.CustomMetadata(key="difficulty", string_value=doc.difficulty))
+    return types.UploadToFileSearchStoreConfig(
+        display_name=doc.name,
+        mime_type=doc.mime,
+        custom_metadata=metadata,
+    )
 
 
 class Persister:
@@ -77,6 +103,7 @@ class Persister:
         ]
 
         for field in STORE_FIELDS:
+            is_question = field in QUESTION_STORES
             for i, item in enumerate(getattr(page.extraction, field), 1):
                 docs.append(Document(
                     store=field,
@@ -84,6 +111,7 @@ class Persister:
                     content=self._renderer.render(item).encode("utf-8"),
                     mime="text/markdown",
                     meta=page.meta,
+                    difficulty=item.difficulty if is_question else None,
                 ))
 
         return docs
@@ -105,7 +133,7 @@ class Persister:
                 operation = await self._files.store_bytes(
                     store_name=stores[doc.store],
                     data=doc.content,
-                    config=doc.upload_config(),
+                    config=_upload_config(doc),
                 )                
                 await op_queue.put(PendingIndex(name=doc.name, operation=operation))
                 reporter.advance("persist")

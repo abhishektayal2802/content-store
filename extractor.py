@@ -17,7 +17,7 @@ from .constants import GEMINI_MODEL
 from .prompts import EXTRACTION_SLICES
 from .queues import iter_queue
 from .reporter import ProgressReporter
-from .types import ExtractedPage, PageMeta
+from infra.content import ExtractedPage, PageMeta
 
 
 class Extractor:

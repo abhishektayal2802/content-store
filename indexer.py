@@ -10,7 +10,7 @@ from infra.llm import GeminiFilesClient, GeminiRuntime
 from .constants import INDEX_POLL_INTERVAL
 from .queues import iter_queue
 from .reporter import ProgressReporter
-from .types import PendingIndex
+from infra.content import PendingIndex
 
 
 class Indexer:

@@ -14,7 +14,7 @@ from .indexer import Indexer
 from .persister import Persister
 from .reporter import ProgressReporter
 from .scraper import Scraper
-from .types import ExtractedPage, PendingIndex
+from infra.content import ExtractedPage, PendingIndex
 
 
 class Pipeline:

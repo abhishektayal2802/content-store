@@ -66,7 +66,8 @@ class Scraper:
         books: list[Book] = []
         for group in BOOK_GROUP_PATTERN.finditer(normalized):
             grade = int(group.group(1))
-            subject = group.group(2).strip()
+            # Standardize to slug form at the point of ingress
+            subject = slugify(group.group(2).strip())
             body = group.group(3)
             books.extend(self._parse_book_group(grade, subject, body))
         return books
@@ -170,7 +171,7 @@ class Scraper:
         return (
             INPUTS_ROOT
             / str(asset.book.grade)
-            / slugify(asset.book.subject)
+            / asset.book.subject
             / slugify(asset.book.title)
             / asset.filename
         )

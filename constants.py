@@ -16,22 +16,22 @@ SCRAPE_CONCURRENCY: int = 6
 
 ALLOWED_GRADES = {9, 10, 11, 12}
 ALLOWED_SUBJECTS = {
-    "Accountancy",
-    "Biology",
-    "Business Studies",
-    "Chemistry",
-    "Computer Science",
-    "Economics",
-    "English",
-    "Geography",
-    "Hindi",
-    "History",
-    "Mathematics",
-    "Physics",
-    "Political Science",
-    "Psychology",
-    "Social Science",
-    "Sociology",
+    "accountancy",
+    "biology",
+    "business-studies",
+    "chemistry",
+    "computer-science",
+    "economics",
+    "english",
+    "geography",
+    "hindi",
+    "history",
+    "mathematics",
+    "physics",
+    "political-science",
+    "psychology",
+    "social-science",
+    "sociology",
 }
 
 BOOK_GROUP_PATTERN = re.compile(
