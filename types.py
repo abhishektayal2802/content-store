@@ -11,21 +11,16 @@ Stage = Literal["scrape", "extract", "persist", "index"]
 
 
 class Book(BaseModel):
-    """One book discovered from the NCERT catalog."""
+    """One NCERT book entry in the checked-in catalog manifest."""
 
+    # CBSE grade (9..12).
     grade: int
+    # Canonical slugified subject (matches ALLOWED_SUBJECTS).
     subject: str
+    # Human-readable book title as it appears on ncert.nic.in.
     title: str
+    # NCERT asset code (e.g. "iebe1") used to derive the dd.zip URL.
     code: str
-    range_end: int
-
-
-class Asset(BaseModel):
-    """One PDF to download."""
-
-    book: Book
-    filename: str
-    url: str
 
 
 class ExtractionSlice(BaseModel):

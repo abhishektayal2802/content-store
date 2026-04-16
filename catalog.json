@@ -1,0 +1,416 @@
+[
+  {
+    "grade": 9,
+    "subject": "english",
+    "title": "Beehive",
+    "code": "iebe1"
+  },
+  {
+    "grade": 9,
+    "subject": "english",
+    "title": "Moments Supplementary Reader",
+    "code": "iemo1"
+  },
+  {
+    "grade": 9,
+    "subject": "english",
+    "title": "Words and Expressions  1",
+    "code": "iewe1"
+  },
+  {
+    "grade": 9,
+    "subject": "mathematics",
+    "title": "Mathematics",
+    "code": "iemh1"
+  },
+  {
+    "grade": 9,
+    "subject": "social-science",
+    "title": "Contemporary India-I",
+    "code": "iess1"
+  },
+  {
+    "grade": 9,
+    "subject": "social-science",
+    "title": "Economics",
+    "code": "iess2"
+  },
+  {
+    "grade": 9,
+    "subject": "social-science",
+    "title": "India and the Contemporary World-I",
+    "code": "iess3"
+  },
+  {
+    "grade": 9,
+    "subject": "social-science",
+    "title": "Democratic Politics-I",
+    "code": "iess4"
+  },
+  {
+    "grade": 10,
+    "subject": "english",
+    "title": "First Flight",
+    "code": "jeff1"
+  },
+  {
+    "grade": 10,
+    "subject": "english",
+    "title": "Foot Prints Without feet Supp. Reader",
+    "code": "jefp1"
+  },
+  {
+    "grade": 10,
+    "subject": "english",
+    "title": "Words and Expressions  2",
+    "code": "jewe2"
+  },
+  {
+    "grade": 10,
+    "subject": "mathematics",
+    "title": "Mathematics",
+    "code": "jemh1"
+  },
+  {
+    "grade": 10,
+    "subject": "social-science",
+    "title": "Contemporary India",
+    "code": "jess1"
+  },
+  {
+    "grade": 10,
+    "subject": "social-science",
+    "title": "Understanding Economic Development",
+    "code": "jess2"
+  },
+  {
+    "grade": 10,
+    "subject": "social-science",
+    "title": "India and the Contemporary World-II",
+    "code": "jess3"
+  },
+  {
+    "grade": 10,
+    "subject": "social-science",
+    "title": "Democratic Politics",
+    "code": "jess4"
+  },
+  {
+    "grade": 11,
+    "subject": "accountancy",
+    "title": "Financial Accounting-I",
+    "code": "keac1"
+  },
+  {
+    "grade": 11,
+    "subject": "accountancy",
+    "title": "Accountancy-II",
+    "code": "keac2"
+  },
+  {
+    "grade": 11,
+    "subject": "biology",
+    "title": "Biology",
+    "code": "kebo1"
+  },
+  {
+    "grade": 11,
+    "subject": "business-studies",
+    "title": "Business Studies",
+    "code": "kebs1"
+  },
+  {
+    "grade": 11,
+    "subject": "chemistry",
+    "title": "Chemistry Part-I",
+    "code": "kech1"
+  },
+  {
+    "grade": 11,
+    "subject": "chemistry",
+    "title": "Chemistry Part II",
+    "code": "kech2"
+  },
+  {
+    "grade": 11,
+    "subject": "computer-science",
+    "title": "Computer Science",
+    "code": "kecs1"
+  },
+  {
+    "grade": 11,
+    "subject": "economics",
+    "title": "Indian Economic Development",
+    "code": "keec1"
+  },
+  {
+    "grade": 11,
+    "subject": "economics",
+    "title": "Statistics for Economics",
+    "code": "kest1"
+  },
+  {
+    "grade": 11,
+    "subject": "english",
+    "title": "Hornbill",
+    "code": "kehb1"
+  },
+  {
+    "grade": 11,
+    "subject": "english",
+    "title": "Snapshots Suppl.Reader English",
+    "code": "kesp1"
+  },
+  {
+    "grade": 11,
+    "subject": "english",
+    "title": "Woven Words",
+    "code": "keww1"
+  },
+  {
+    "grade": 11,
+    "subject": "geography",
+    "title": "India Physical Environment",
+    "code": "kegy1"
+  },
+  {
+    "grade": 11,
+    "subject": "geography",
+    "title": "Fundamental of Physical Geography",
+    "code": "kegy2"
+  },
+  {
+    "grade": 11,
+    "subject": "geography",
+    "title": "Pratical Work in Geography",
+    "code": "kegy3"
+  },
+  {
+    "grade": 11,
+    "subject": "history",
+    "title": "Themes in World History",
+    "code": "kehs1"
+  },
+  {
+    "grade": 11,
+    "subject": "mathematics",
+    "title": "Mathematics",
+    "code": "kemh1"
+  },
+  {
+    "grade": 11,
+    "subject": "physics",
+    "title": "Physics Part-I",
+    "code": "keph1"
+  },
+  {
+    "grade": 11,
+    "subject": "physics",
+    "title": "Physics Part-II",
+    "code": "keph2"
+  },
+  {
+    "grade": 11,
+    "subject": "political-science",
+    "title": "Political Theory",
+    "code": "keps1"
+  },
+  {
+    "grade": 11,
+    "subject": "political-science",
+    "title": "India Constitution at Work",
+    "code": "keps2"
+  },
+  {
+    "grade": 11,
+    "subject": "psychology",
+    "title": "Introduction to Psychology",
+    "code": "kepy1"
+  },
+  {
+    "grade": 11,
+    "subject": "sociology",
+    "title": "Introducing Sociology",
+    "code": "kesy1"
+  },
+  {
+    "grade": 11,
+    "subject": "sociology",
+    "title": "Understanding Society",
+    "code": "kesy2"
+  },
+  {
+    "grade": 12,
+    "subject": "accountancy",
+    "title": "Accountancy-I",
+    "code": "leac1"
+  },
+  {
+    "grade": 12,
+    "subject": "accountancy",
+    "title": "Accountancy Part-II",
+    "code": "leac2"
+  },
+  {
+    "grade": 12,
+    "subject": "accountancy",
+    "title": "Computerised Accounting System",
+    "code": "leca1"
+  },
+  {
+    "grade": 12,
+    "subject": "biology",
+    "title": "Biology",
+    "code": "lebo1"
+  },
+  {
+    "grade": 12,
+    "subject": "business-studies",
+    "title": "Business Studies-I",
+    "code": "lebs1"
+  },
+  {
+    "grade": 12,
+    "subject": "business-studies",
+    "title": "Business Studies-II",
+    "code": "lebs2"
+  },
+  {
+    "grade": 12,
+    "subject": "chemistry",
+    "title": "Chemistry-I",
+    "code": "lech1"
+  },
+  {
+    "grade": 12,
+    "subject": "chemistry",
+    "title": "Chemistry-II",
+    "code": "lech2"
+  },
+  {
+    "grade": 12,
+    "subject": "computer-science",
+    "title": "Computer Science",
+    "code": "lecs1"
+  },
+  {
+    "grade": 12,
+    "subject": "economics",
+    "title": "Introductory Macroeconomics",
+    "code": "leec1"
+  },
+  {
+    "grade": 12,
+    "subject": "economics",
+    "title": "Introductory Microeconomics",
+    "code": "leec2"
+  },
+  {
+    "grade": 12,
+    "subject": "english",
+    "title": "Flamingo",
+    "code": "lefl1"
+  },
+  {
+    "grade": 12,
+    "subject": "english",
+    "title": "Kaliedoscope",
+    "code": "lekl1"
+  },
+  {
+    "grade": 12,
+    "subject": "english",
+    "title": "Vistas",
+    "code": "levt1"
+  },
+  {
+    "grade": 12,
+    "subject": "geography",
+    "title": "Fundamentals of Human Geography",
+    "code": "legy1"
+  },
+  {
+    "grade": 12,
+    "subject": "geography",
+    "title": "India -People And Economy",
+    "code": "legy2"
+  },
+  {
+    "grade": 12,
+    "subject": "geography",
+    "title": "Practical Work in Geography Part II",
+    "code": "legy3"
+  },
+  {
+    "grade": 12,
+    "subject": "history",
+    "title": "Themes in Indian History-I",
+    "code": "lehs1"
+  },
+  {
+    "grade": 12,
+    "subject": "history",
+    "title": "Themes in Indian History-II",
+    "code": "lehs2"
+  },
+  {
+    "grade": 12,
+    "subject": "history",
+    "title": "Themes in Indian History-III",
+    "code": "lehs3"
+  },
+  {
+    "grade": 12,
+    "subject": "mathematics",
+    "title": "Mathematics Part-I",
+    "code": "lemh1"
+  },
+  {
+    "grade": 12,
+    "subject": "mathematics",
+    "title": "Mathematics Part-II",
+    "code": "lemh2"
+  },
+  {
+    "grade": 12,
+    "subject": "physics",
+    "title": "Physics Part-I",
+    "code": "leph1"
+  },
+  {
+    "grade": 12,
+    "subject": "physics",
+    "title": "Physics Part-II",
+    "code": "leph2"
+  },
+  {
+    "grade": 12,
+    "subject": "political-science",
+    "title": "Contemporary World Politics",
+    "code": "leps1"
+  },
+  {
+    "grade": 12,
+    "subject": "political-science",
+    "title": "Politics in India Since Independence",
+    "code": "leps2"
+  },
+  {
+    "grade": 12,
+    "subject": "psychology",
+    "title": "Psychology",
+    "code": "lepy1"
+  },
+  {
+    "grade": 12,
+    "subject": "sociology",
+    "title": "Indian Society",
+    "code": "lesy1"
+  },
+  {
+    "grade": 12,
+    "subject": "sociology",
+    "title": "Social Change and Development in India",
+    "code": "lesy2"
+  }
+]

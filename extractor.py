@@ -10,10 +10,9 @@ import pymupdf
 from pydantic import BaseModel
 
 from infra.content import PageExtraction
-from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime
+from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime, Models
 from infra.llm.types import InteractionTurn, UriMediaContent
 
-from .constants import GEMINI_MODEL
 from .prompts import EXTRACTION_SLICES
 from .queues import iter_queue
 from .reporter import ProgressReporter
@@ -96,16 +95,27 @@ class Extractor:
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
         reporter: ProgressReporter,
     ) -> None:
-        """Extract one page, enqueue result, advance progress on success."""
-        upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
+        """Extract one page; transient failures are contained to this page only."""
+        # Start `upload` as None so a mid-flight failure during upload_bytes()
+        # doesn't leave the finally-block referencing an unbound name.
+        upload = None
         try:
+            upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
             extraction = await self._run_slices(upload.uri)
             await page_queue.put(ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction))
             reporter.advance("extract")
         except Exception as e:
+            # Any failure (upload, extract, enqueue) is scoped to this one page.
             reporter.record_error("extract", meta.page_key, e)
         finally:
-            await self._files.delete_file(upload)
+            # Only clean up if we actually created a transient file upstream.
+            if upload is not None:
+                try:
+                    await self._files.delete_file(upload)
+                except Exception as e:
+                    # Cleanup leaks are bounded by Gemini's transient-file TTL;
+                    # surface them separately so they don't mask real errors.
+                    reporter.record_error("extract", f"{meta.page_key} cleanup", e)
 
     async def _run_slices(self, uri: str) -> PageExtraction:
         """Run all extraction slices in parallel and merge results."""
@@ -122,7 +132,7 @@ class Extractor:
     ) -> T:
         """Run one typed extraction call for a single category."""
         parsed, _ = await self._interactions.chat(
-            model=GEMINI_MODEL,
+            model=Models.SMALL,
             system_instruction=prompt,
             input=[InteractionTurn(
                 role="user",
