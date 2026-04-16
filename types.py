@@ -17,7 +17,7 @@ class Book(BaseModel):
     subject: str
     title: str
     code: str
-    book_url: str
+    range_end: int
 
 
 class Asset(BaseModel):

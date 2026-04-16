@@ -45,9 +45,6 @@ BOOK_OPTION_PATTERN = re.compile(
     re.S,
 )
 
-# Regex to extract suffix values from per-book page JavaScript.
-SUFFIX_PATTERN = re.compile(r'textbook\.php\?\w+=(\w+)"')
-
 # --- Extractor constants ---
 
 GEMINI_MODEL = "gemini-3.1-flash-lite-preview"

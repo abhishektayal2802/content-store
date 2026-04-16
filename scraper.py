@@ -20,7 +20,6 @@ from .constants import (
     INPUTS_ROOT,
     NCERT_BASE,
     SCRAPE_CONCURRENCY,
-    SUFFIX_PATTERN,
     USER_AGENT,
 )
 from .reporter import ProgressReporter
@@ -47,10 +46,7 @@ class Scraper:
             await pdf_queue.put(None)
             return
 
-        # Discover assets concurrently from per-book pages.
-        asset_lists = await asyncio.gather(*(self._build_assets(b) for b in books))
-        assets = [a for assets in asset_lists for a in assets]
-
+        assets = [a for book in books for a in self._build_assets(book)]
         reporter.grow("scrape", len(assets))
         await self._download_all(assets, pdf_queue, reporter)
         await pdf_queue.put(None)
@@ -78,14 +74,14 @@ class Scraper:
             title = option.group(2).strip()
             code = option.group(3).strip()
             range_val = option.group(4).strip()
-            book_url = urljoin(NCERT_BASE, f"textbook.php?{code}={range_val}")
+            range_end = int(range_val.split("-")[-1])
             books.append(
                 Book(
                     grade=grade,
                     subject=subject,
                     title=title,
                     code=code,
-                    book_url=book_url,
+                    range_end=range_end,
                 )
             )
         return books
@@ -100,10 +96,13 @@ class Scraper:
 
     # --- Asset discovery ---
 
-    async def _fetch_book_suffixes(self, book: Book) -> list[str]:
-        """Fetch per-book page and extract all suffix values from JavaScript."""
-        html = await get_text(book.book_url, client=self._client)
-        return SUFFIX_PATTERN.findall(html)
+    def _chapter_suffixes(self, book: Book) -> list[str]:
+        """Generate chapter suffixes from catalog range."""
+        return [f"{n:02d}" for n in range(1, book.range_end + 1)]
+
+    def _extra_suffixes(self) -> list[str]:
+        """Common extra suffixes present across most NCERT books."""
+        return ["ps", "an", "a1", "a2", "gl", "ax"]
 
     def _suffix_to_filename(self, suffix: str) -> Optional[str]:
         """Convert suffix to filename, or None if not a recognized asset type."""
@@ -122,9 +121,9 @@ class Scraper:
             return "glossary.pdf"
         return None
 
-    async def _build_assets(self, book: Book) -> list[Asset]:
-        """Discover assets by parsing the per-book page."""
-        suffixes = await self._fetch_book_suffixes(book)
+    def _build_assets(self, book: Book) -> list[Asset]:
+        """Build all assets from chapters + extras."""
+        suffixes = self._chapter_suffixes(book) + self._extra_suffixes()
         return [
             self._pdf_asset(book, filename, suffix)
             for suffix in suffixes
