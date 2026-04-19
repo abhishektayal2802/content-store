@@ -3,11 +3,13 @@
 from typing import Literal, Type
 
 from pydantic import BaseModel, ConfigDict
+
 from infra.prompts import join_sections
+from infra.rag import CorpusKind, MetadataValue
 
 
 # Progress reporter: pipeline stage labels for bars and error rows.
-Stage = Literal["scrape", "extract", "persist", "index"]
+Stage = Literal["scrape", "extract", "stage", "import"]
 
 
 class Book(BaseModel):
@@ -21,6 +23,41 @@ class Book(BaseModel):
     title: str
     # NCERT asset code (e.g. "iebe1") used to derive the dd.zip URL.
     code: str
+
+
+class StagingUnit(BaseModel):
+    """One file about to be uploaded to GCS for a RAG corpus.
+
+    Destination corpus is resolved at construction time (so the stager
+    doesn't need a CORPUS_BY_KIND lookup at upload time). `metadata` is
+    the RAG per-file metadata dict that will be attached post-import.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    corpus: CorpusKind
+    display_name: str
+    mime: str
+    content: bytes
+    metadata: dict[str, MetadataValue]
+
+
+class StagedFile(BaseModel):
+    """One file already in GCS, awaiting import + metadata attach.
+
+    `metadata` is carried forward so the importer can attach it to the
+    RagFile created by the import LRO.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    gcs_uri: str
+    display_name: str
+    metadata: dict[str, MetadataValue]
+
+
+# Manifest the stager hands to the importer: per-corpus list of staged files.
+CorpusManifest = dict[CorpusKind, list[StagedFile]]
 
 
 class ExtractionSlice(BaseModel):

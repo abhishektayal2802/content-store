@@ -1,4 +1,4 @@
-"""Extraction prompts and slice definitions for the content store pipeline."""
+"""Extraction prompts for the content_store LLM extraction pass."""
 
 from infra.content import ArtefactsExtraction, QuestionsExtraction
 
@@ -20,18 +20,3 @@ EXTRACTION_SLICES: tuple[ExtractionSlice, ...] = (
         response=ArtefactsExtraction,
     ),
 )
-
-# PageExtraction field names for persister iteration.
-STORE_FIELDS: tuple[str, ...] = (
-    "mcq_questions",
-    "very_short_questions",
-    "short_questions",
-    "long_questions",
-    "equations",
-    "code",
-    "factoids",
-    "definitions",
-)
-
-# Persister stores: "pages" (raw PDFs) plus one per extraction field.
-STORE_KINDS: tuple[str, ...] = ("pages", *STORE_FIELDS)

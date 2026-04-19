@@ -60,10 +60,6 @@ class Scraper:
             # Always signal end-of-stream so downstream workers can drain.
             await pdf_queue.put(None)
 
-    async def close(self) -> None:
-        """No-op retained for pipeline API compatibility."""
-        return None
-
     # --- Catalog ---
 
     def _load_catalog(self) -> list[Book]:

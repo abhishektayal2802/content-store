@@ -19,6 +19,17 @@ from rich.table import Table
 from .types import Stage
 
 
+# Per-stage progress bar labels. A stage's bar appears only once that stage
+# actually starts doing work -- hides the misleading 0% row while upstream
+# stages are still running.
+_STAGE_LABELS: dict[Stage, str] = {
+    "scrape": "Scraping PDFs",
+    "extract": "Extracting pages",
+    "stage": "Staging to GCS",
+    "import": "Importing (LRO)",
+}
+
+
 class ProgressReporter:
     """Centralizes all CLI output: progress bars and error summary."""
 
@@ -41,17 +52,14 @@ class ProgressReporter:
         """Context manager that starts/stops progress display and prints summary."""
         try:
             with self._progress:
-                self._tasks["scrape"] = self._progress.add_task("Scraping PDFs", total=None)
-                self._tasks["extract"] = self._progress.add_task("Extracting pages", total=None)
-                self._tasks["persist"] = self._progress.add_task("Persisting artefacts", total=None)
-                self._tasks["index"] = self._progress.add_task("Indexing documents", total=None)
                 yield self
         finally:
             self._print_summary()
 
     def grow(self, stage: Stage, delta: int) -> None:
-        """Increment a stage's total by delta."""
-        task_id = self._tasks[stage]
+        """Increment a stage's total by delta, creating its bar on first call."""
+        # Lazy bar creation: a stage only shows up once it has work to do.
+        task_id = self._tasks.get(stage) or self._add_task(stage)
         current = self._progress.tasks[task_id].total or 0
         self._progress.update(task_id, total=current + delta)
 
@@ -63,6 +71,12 @@ class ProgressReporter:
         """Record a non-fatal error for later summary."""
         msg = str(exc) or type(exc).__name__
         self._errors.append((stage, context, msg))
+
+    def _add_task(self, stage: Stage) -> TaskID:
+        """Register a stage's progress bar with the rich Progress view."""
+        task_id = self._progress.add_task(_STAGE_LABELS[stage], total=None)
+        self._tasks[stage] = task_id
+        return task_id
 
     def _print_summary(self) -> None:
         """Print error summary after progress bars close."""

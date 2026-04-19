@@ -61,5 +61,9 @@ ZIP_RETRIES: int = 5
 
 QUEUE_SIZE: int = 64
 
-# Seconds between polls while waiting for File Search indexing to complete.
-INDEX_POLL_INTERVAL: float = 5.0
+# MIME -> GCS object-name extension. The import LRO uses the extension on
+# the GCS object to select a chunker (PDF vs markdown vs text).
+SUFFIX_BY_MIME: dict[str, str] = {
+    "application/pdf": ".pdf",
+    "text/markdown": ".md",
+}
