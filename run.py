@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from infra.gcp import GcpIdentity
 from infra.llm import GeminiRuntime
-from infra.rag import VertexRagClient
+from infra.rag import VertexRagWriter
 from infra.secrets import SecretReader
 
 from .pipeline import Pipeline
@@ -25,7 +25,7 @@ async def main() -> None:
     api_key = SecretReader(gcp).get("GEMINI_API_KEY")
 
     runtime = GeminiRuntime(api_key)
-    rag = VertexRagClient(identity=gcp, bucket=bucket)
+    rag = VertexRagWriter(identity=gcp, bucket=bucket)
     try:
         await Pipeline(runtime, rag).run()
     finally:

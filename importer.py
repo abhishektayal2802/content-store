@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from infra.constants import Const
-from infra.rag import CorpusKind, VertexRagClient
+from infra.rag import CorpusKind, VertexRagWriter
 
 from .reporter import StageReporter
 from .types import CorpusManifest, StagedFile
@@ -16,7 +16,7 @@ from .types import CorpusManifest, StagedFile
 class Importer:
     """Bin-packs corpora into LRO-safe batches, imports in parallel, attaches metadata."""
 
-    def __init__(self, rag: VertexRagClient) -> None:
+    def __init__(self, rag: VertexRagWriter) -> None:
         self._rag = rag
 
     async def run(

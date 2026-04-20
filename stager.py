@@ -14,7 +14,7 @@ from infra.content import (
     PageMeta,
     QUESTION_KINDS,
 )
-from infra.rag import VertexRagClient
+from infra.rag import VertexRagWriter
 
 from .constants import SUFFIX_BY_MIME
 from .queues import iter_queue
@@ -25,7 +25,7 @@ from .types import CorpusManifest, StagedFile, StagingMetadata, StagingUnit
 class Stager:
     """Consumes extracted pages, uploads bytes to GCS, records manifest entries."""
 
-    def __init__(self, rag: VertexRagClient) -> None:
+    def __init__(self, rag: VertexRagWriter) -> None:
         self._rag = rag
         self._renderer = ContentMarkdownRenderer()
         self.manifest: CorpusManifest = {"pages": [], "questions": [], "artefacts": []}
@@ -54,11 +54,8 @@ class Stager:
             reporter.record_error(page.meta.page_key, e)
 
     async def _upload(self, unit: StagingUnit, reporter: StageReporter) -> None:
-        """Upload bytes + metadata to GCS; record manifest row."""
-        uri = await self._rag.stage(
-            unit.object_name, unit.content, unit.mime,
-            metadata={k: str(v) for k, v in unit.metadata.items()},
-        )
+        """Upload bytes to GCS; record manifest row for the post-import metadata attach."""
+        uri = await self._rag.stage(unit.object_name, unit.content, unit.mime)
         self.manifest[unit.corpus].append(
             StagedFile(gcs_uri=uri, metadata=unit.metadata)
         )
@@ -73,7 +70,7 @@ class Stager:
                 yield self._unit(
                     page.meta, kind,
                     self._renderer.render(item).encode("utf-8"), "text/markdown",
-                    item_suffix=f"__item-{i:03d}", difficulty=difficulty,
+                    item_index=i, difficulty=difficulty,
                 )
 
     def _unit(
@@ -82,19 +79,16 @@ class Stager:
         kind: ContentKind,
         content: bytes,
         mime: str,
-        item_suffix: str = "",
+        item_index: Optional[int] = None,
         difficulty: Optional[str] = None,
     ) -> StagingUnit:
-        """Build one StagingUnit with its sharded GCS object name."""
+        """Build one StagingUnit; PageMeta owns the object-name codec."""
         corpus = CORPUS_BY_KIND[kind]
-        # Shard by book_key to stay under LRO file caps; kind in filename keeps it unique.
-        object_name = (
-            f"{corpus}/{meta.book_key}"
-            f"/{kind}__{meta.page_key}{item_suffix}{SUFFIX_BY_MIME[mime]}"
-        )
         return StagingUnit(
             corpus=corpus,
-            object_name=object_name,
+            object_name=meta.object_name(
+                corpus, kind, SUFFIX_BY_MIME[mime], item_index=item_index,
+            ),
             mime=mime,
             content=content,
             metadata=_metadata(meta, kind, difficulty),

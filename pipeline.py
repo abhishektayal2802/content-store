@@ -8,7 +8,7 @@ from typing import Optional
 
 from infra.content import ExtractedPage, METADATA_SCHEMA
 from infra.llm import GeminiRuntime
-from infra.rag import VertexRagClient
+from infra.rag import VertexRagWriter
 
 from .constants import QUEUE_SIZE
 from .extractor import Extractor
@@ -21,7 +21,7 @@ from .stager import Stager
 class Pipeline:
     """Orchestrates streaming scrape -> extract -> stage, then terminal import."""
 
-    def __init__(self, runtime: GeminiRuntime, rag: VertexRagClient) -> None:
+    def __init__(self, runtime: GeminiRuntime, rag: VertexRagWriter) -> None:
         self._rag = rag
         self._scraper = Scraper()
         self._extractor = Extractor(runtime)
