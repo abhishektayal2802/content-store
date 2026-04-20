@@ -1,4 +1,8 @@
-"""Streaming pipeline: scrape + extract + stage concurrently, then import LROs."""
+"""Pipeline: stream scrape -> extract to local cache, then publish to GCS + Vertex.
+
+The local extracted-page cache is the only incremental checkpoint. The publish
+phase treats GCS + Vertex corpora as rebuildable projections of that cache.
+"""
 
 from __future__ import annotations
 
@@ -6,48 +10,38 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from infra.content import ExtractedPage, METADATA_SCHEMA
 from infra.llm import GeminiRuntime
 from infra.rag import VertexRagWriter
 
+from .cache import PageCache
 from .constants import QUEUE_SIZE
 from .extractor import Extractor
-from .importer import Importer
+from .publisher import Publisher
 from .reporter import ProgressReporter
 from .scraper import Scraper
-from .stager import Stager
 
 
 class Pipeline:
-    """Orchestrates streaming scrape -> extract -> stage, then terminal import."""
+    """Two-phase runner: streaming scrape+extract, then barrier publish from cache."""
 
     def __init__(self, runtime: GeminiRuntime, rag: VertexRagWriter) -> None:
-        self._rag = rag
         self._scraper = Scraper()
         self._extractor = Extractor(runtime)
-        self._stager = Stager(rag)
-        self._importer = Importer(rag)
-
+        self._publisher = Publisher(rag)
+        self._cache = PageCache()
+        # Only the scrape->extract boundary is streamed; the publish phase is a barrier.
         self._pdf_queue: asyncio.Queue[Optional[Path]] = asyncio.Queue(maxsize=QUEUE_SIZE)
-        self._page_queue: asyncio.Queue[Optional[ExtractedPage]] = asyncio.Queue(maxsize=QUEUE_SIZE)
 
     async def run(self) -> None:
-        """Setup corpora, stream scrape+extract+stage, then import as terminal."""
-        staged_page_keys = await self._setup()
+        """Stream scrape+extract in parallel; publish once the cache is closed."""
         reporter = ProgressReporter()
         with reporter.live():
-            # Streaming phase: scrape -> extract -> stage run in parallel.
+            # Phase 1: scrape -> extract concurrently via pdf_queue.
             # TaskGroup surfaces the first exception to cancel siblings.
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._scraper.run(self._pdf_queue, reporter.scrape))
                 tg.create_task(self._extractor.run(
-                    self._pdf_queue, self._page_queue, staged_page_keys, reporter.extract,
+                    self._pdf_queue, self._cache, reporter.extract,
                 ))
-                tg.create_task(self._stager.run(self._page_queue, reporter.stage))
-            # Terminal phase: fire 3 import LROs, then attach metadata.
-            await self._importer.run(self._stager.manifest, reporter.importer)
-
-    async def _setup(self) -> set[str]:
-        """Ensure corpora + schemas exist; return page_keys with GCS sentinels."""
-        await self._rag.ensure_corpora(METADATA_SCHEMA)
-        return await self._rag.list_sentinels()
+            # Phase 2: barrier. The cache is complete; rebuild remote from it.
+            await self._publisher.run(self._cache, reporter)

@@ -1,23 +1,16 @@
 """Pipeline-specific types for the content_store."""
 
-from typing import Literal, Protocol, Type
+from typing import Literal, Type
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from infra.content import PageExtraction, PageMeta
 from infra.prompts import join_sections
-from infra.rag import CorpusKind, MetadataValue
 
 
 # Pipeline stage labels for progress bars and error rows.
-Stage = Literal["scrape", "extract", "stage", "import"]
-
-
-class Resumable[UnitT, KeyT](Protocol):
-    """Resume contract: map a unit to its sentinel key + list completed keys."""
-
-    def key(self, unit: UnitT) -> KeyT: ...
-
-    async def completed_keys(self) -> set[KeyT]: ...
+# `scrape` + `extract` run together as the streaming phase; the rest are the publish phase.
+Stage = Literal["scrape", "extract", "reset", "upload", "attach"]
 
 
 class Book(BaseModel):
@@ -30,39 +23,20 @@ class Book(BaseModel):
     code: str
 
 
-# Per-file metadata dict attached on upload + import.
-StagingMetadata = dict[str, MetadataValue]
+class CachedPage(BaseModel):
+    """One page's durable extraction record: the extract-resume unit of truth.
 
+    Persisted as JSON under `EXTRACTED_ROOT`. PDF bytes are intentionally *not*
+    stored here; they are a deterministic function of the chapter PDF on disk
+    and are re-materialized by the publisher on demand.
+    """
 
-class StagingUnit(BaseModel):
-    """One file queued for upload to GCS."""
-
-    model_config = ConfigDict(frozen=True)
-
-    corpus: CorpusKind
-    object_name: str
-    mime: str
-    content: bytes
-    metadata: StagingMetadata
-
-
-class StagedFile(BaseModel):
-    """One file already in GCS, awaiting import + metadata attach."""
-
-    model_config = ConfigDict(frozen=True)
-
-    gcs_uri: str
-    metadata: StagingMetadata
-
-
-# Stager -> Importer handoff.
-CorpusManifest = dict[CorpusKind, list[StagedFile]]
+    meta: PageMeta
+    extraction: PageExtraction
 
 
 class ExtractionSlice(BaseModel):
     """One extraction slice: description + Pydantic response schema."""
-
-    model_config = ConfigDict(frozen=True)
 
     description: str
     response: Type[BaseModel]

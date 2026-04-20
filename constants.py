@@ -8,6 +8,9 @@ from .types import Stage
 # --- Paths ---
 
 INPUTS_ROOT: Path = Path(__file__).parent / "inputs"
+# Durable per-page extraction cache; mirrors the INPUTS_ROOT layout one-to-one.
+# Cache presence is the extract-stage resume signal -- no remote state involved.
+EXTRACTED_ROOT: Path = Path(__file__).parent / "extracted"
 CATALOG_PATH: Path = Path(__file__).parent / "catalog.json"
 ZIP_CACHE_ROOT: Path = INPUTS_ROOT / "_zips"
 
@@ -77,16 +80,12 @@ QUEUE_SIZE: int = 64
 BOOK_DONE_MARKER: str = ".done"
 
 # Progress-bar labels for each pipeline stage (surfaced by ProgressReporter).
+# The publish-phase stages (reset/upload/attach) all have pre-computable totals
+# because they operate over the closed extracted cache, not a live stream.
 STAGE_LABELS: dict[Stage, str] = {
     "scrape": "Scraping PDFs",
     "extract": "Extracting pages",
-    "stage": "Staging to GCS",
-    "import": "Importing (LRO)",
-}
-
-# MIME -> GCS object-name extension. The import LRO uses the extension on
-# the GCS object to select a chunker (PDF vs markdown vs text).
-SUFFIX_BY_MIME: dict[str, str] = {
-    "application/pdf": ".pdf",
-    "text/markdown": ".md",
+    "reset": "Resetting remote state",
+    "upload": "Uploading to Vertex",
+    "attach": "Attaching metadata",
 }
