@@ -2,7 +2,7 @@
 
 from typing import Literal, Type
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from infra.prompts import join_sections
 from infra.rag import CorpusKind, MetadataValue
@@ -33,8 +33,6 @@ class StagingUnit(BaseModel):
     the RAG per-file metadata dict that will be attached post-import.
     """
 
-    model_config = ConfigDict(frozen=True)
-
     corpus: CorpusKind
     display_name: str
     mime: str
@@ -49,8 +47,6 @@ class StagedFile(BaseModel):
     RagFile created by the import LRO.
     """
 
-    model_config = ConfigDict(frozen=True)
-
     gcs_uri: str
     display_name: str
     metadata: dict[str, MetadataValue]
@@ -62,8 +58,6 @@ CorpusManifest = dict[CorpusKind, list[StagedFile]]
 
 class ExtractionSlice(BaseModel):
     """One extraction slice: description and Pydantic response schema."""
-
-    model_config = ConfigDict(frozen=True)
 
     description: str
     response: Type[BaseModel]
