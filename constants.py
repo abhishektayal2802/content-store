@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from .types import Stage
+
 # --- Paths ---
 
 INPUTS_ROOT: Path = Path(__file__).parent / "inputs"
@@ -54,12 +56,33 @@ BOOK_OPTION_PATTERN = re.compile(
 
 # Simultaneous book-zip downloads. NCERT is flaky, keep this low.
 ZIP_CONCURRENCY: int = 3
-# Retries handed to pypdl per book zip.
-ZIP_RETRIES: int = 5
+
+# NCERT zip entries: "<book.code><suffix>.pdf". Chapter stems are normalized
+# to human-readable names (e.g. "chapter-03") so retrieval filters are
+# predictable across books. Unknown suffixes pass through unchanged.
+NCERT_CHAPTER_NUM_RE = re.compile(r"^\d{2}$")
+NCERT_APPENDIX_RE = re.compile(r"^a(\d+)$")
+NCERT_ANNEXURE_RE = re.compile(r"^ax(\d*)$")
+NCERT_LITERAL_STEMS: dict[str, str] = {
+    "ps": "prelims",
+    "an": "answers",
+    "gl": "glossary",
+    "glo": "glossary",
+}
 
 # --- Pipeline constants ---
 
 QUEUE_SIZE: int = 64
+# Book-dir marker: present = scraped cleanly; absent = next run re-scrapes.
+BOOK_DONE_MARKER: str = ".done"
+
+# Progress-bar labels for each pipeline stage (surfaced by ProgressReporter).
+STAGE_LABELS: dict[Stage, str] = {
+    "scrape": "Scraping PDFs",
+    "extract": "Extracting pages",
+    "stage": "Staging to GCS",
+    "import": "Importing (LRO)",
+}
 
 # MIME -> GCS object-name extension. The import LRO uses the extension on
 # the GCS object to select a chunker (PDF vs markdown vs text).

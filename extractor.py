@@ -15,7 +15,7 @@ from infra.llm.types import InteractionTurn, UriMediaContent
 
 from .prompts import EXTRACTION_SLICES
 from .queues import iter_queue
-from .reporter import ProgressReporter
+from .reporter import StageReporter
 from infra.content import ExtractedPage, PageMeta
 
 
@@ -23,7 +23,6 @@ class Extractor:
     """Splits input PDFs and extracts content via Gemini."""
 
     def __init__(self, runtime: GeminiRuntime) -> None:
-        """Initialize extractor with shared Gemini runtime."""
         self._interactions = GeminiInteractionsClient(runtime)
         self._files = GeminiFilesClient(runtime)
 
@@ -31,14 +30,14 @@ class Extractor:
         self,
         pdf_queue: asyncio.Queue[Optional[Path]],
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
-        done: set[str],
-        reporter: ProgressReporter,
+        staged_page_keys: set[str],
+        reporter: StageReporter,
     ) -> None:
-        """Consume PDFs from queue, extract new pages, push to page queue."""
+        """Extract pages missing a GCS sentinel; push them downstream."""
         tasks = []
         async for pdf_path in iter_queue(pdf_queue):
-            pages = await self._split_new(pdf_path, done)
-            reporter.grow("extract", len(pages))
+            pages = await self._split_new(pdf_path, staged_page_keys)
+            reporter.grow(len(pages))
             for meta, page_bytes in pages:
                 tasks.append(asyncio.create_task(
                     self._extract_one(meta, page_bytes, page_queue, reporter)
@@ -49,12 +48,14 @@ class Extractor:
 
     # --- PDF splitting ---
 
-    async def _split_new(self, pdf_path: Path, done: set[str]) -> list[tuple[PageMeta, bytes]]:
-        """Split one PDF and filter out already-processed pages."""
+    async def _split_new(
+        self, pdf_path: Path, staged_page_keys: set[str],
+    ) -> list[tuple[PageMeta, bytes]]:
+        """Split one PDF and filter out pages already fully staged in GCS."""
         return [
             (meta, page_bytes)
             for meta, page_bytes in await self._split_one(pdf_path)
-            if meta.page_key not in done
+            if meta.page_key not in staged_page_keys
         ]
 
     async def _split_one(self, pdf_path: Path) -> list[tuple[PageMeta, bytes]]:
@@ -93,29 +94,17 @@ class Extractor:
         meta: PageMeta,
         pdf_bytes: bytes,
         page_queue: asyncio.Queue[Optional[ExtractedPage]],
-        reporter: ProgressReporter,
+        reporter: StageReporter,
     ) -> None:
-        """Extract one page; transient failures are contained to this page only."""
-        # Start `upload` as None so a mid-flight failure during upload_bytes()
-        # doesn't leave the finally-block referencing an unbound name.
-        upload = None
+        """Extract one page; errors are scoped to this page. Leaks bounded by Gemini's TTL."""
         try:
             upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
             extraction = await self._run_slices(upload.uri)
             await page_queue.put(ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction))
-            reporter.advance("extract")
+            await self._files.delete_file(upload)
+            reporter.advance()
         except Exception as e:
-            # Any failure (upload, extract, enqueue) is scoped to this one page.
-            reporter.record_error("extract", meta.page_key, e)
-        finally:
-            # Only clean up if we actually created a transient file upstream.
-            if upload is not None:
-                try:
-                    await self._files.delete_file(upload)
-                except Exception as e:
-                    # Cleanup leaks are bounded by Gemini's transient-file TTL;
-                    # surface them separately so they don't mask real errors.
-                    reporter.record_error("extract", f"{meta.page_key} cleanup", e)
+            reporter.record_error(meta.page_key, e)
 
     async def _run_slices(self, uri: str) -> PageExtraction:
         """Run all extraction slices in parallel and merge results."""

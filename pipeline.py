@@ -1,11 +1,4 @@
-"""Streaming content pipeline: scrape -> extract -> stage, then import.
-
-Stage (GCS upload) runs concurrently with scrape + extract so bytes are
-moving as soon as a page is extracted. Import (chunk + embed + index, one
-LRO per corpus) runs as a terminal gather *after* the extract/stage queue
-drains -- import is a single batch call, not a per-file operation, so
-there is no benefit to interleaving it with extraction.
-"""
+"""Streaming pipeline: scrape + extract + stage concurrently, then import LROs."""
 
 from __future__ import annotations
 
@@ -13,7 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from infra.content import ExtractedPage, METADATA_SCHEMA, PageMeta
+from infra.content import ExtractedPage, METADATA_SCHEMA
 from infra.llm import GeminiRuntime
 from infra.rag import VertexRagClient
 
@@ -29,7 +22,6 @@ class Pipeline:
     """Orchestrates streaming scrape -> extract -> stage, then terminal import."""
 
     def __init__(self, runtime: GeminiRuntime, rag: VertexRagClient) -> None:
-        """Wire up stage-specific workers sharing the same RAG + Gemini clients."""
         self._rag = rag
         self._scraper = Scraper()
         self._extractor = Extractor(runtime)
@@ -41,24 +33,21 @@ class Pipeline:
 
     async def run(self) -> None:
         """Setup corpora, stream scrape+extract+stage, then import as terminal."""
-        done = await self._setup()
+        staged_page_keys = await self._setup()
         reporter = ProgressReporter()
         with reporter.live():
-            # Streaming phase: scrape -> extract -> stage-to-GCS run in
-            # parallel. TaskGroup surfaces the first exception to cancel siblings.
+            # Streaming phase: scrape -> extract -> stage run in parallel.
+            # TaskGroup surfaces the first exception to cancel siblings.
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(self._scraper.run(self._pdf_queue, reporter))
-                tg.create_task(
-                    self._extractor.run(self._pdf_queue, self._page_queue, done, reporter)
-                )
-                tg.create_task(self._stager.run(self._page_queue, reporter))
-            # Terminal phase: all bytes now in GCS. Fire 3 import LROs,
-            # wait for all, then attach metadata in parallel.
-            await self._importer.run(self._stager.manifest, reporter)
+                tg.create_task(self._scraper.run(self._pdf_queue, reporter.scrape))
+                tg.create_task(self._extractor.run(
+                    self._pdf_queue, self._page_queue, staged_page_keys, reporter.extract,
+                ))
+                tg.create_task(self._stager.run(self._page_queue, reporter.stage))
+            # Terminal phase: fire 3 import LROs, then attach metadata.
+            await self._importer.run(self._stager.manifest, reporter.importer)
 
     async def _setup(self) -> set[str]:
-        """Ensure corpora + schemas exist on the RAG client; return resume set."""
+        """Ensure corpora + schemas exist; return page_keys with GCS sentinels."""
         await self._rag.ensure_corpora(METADATA_SCHEMA)
-        # Resume set: page_keys of PDFs already imported into `pages`.
-        done_names = await self._rag.list_file_display_names("pages")
-        return {PageMeta.from_display_name(n)[1].page_key for n in done_names}
+        return await self._rag.list_sentinels()

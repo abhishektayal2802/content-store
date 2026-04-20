@@ -1,21 +1,9 @@
-"""NCERT textbook scraper: downloads per-book dd.zip bundles and extracts PDFs.
-
-Design:
-- The book catalog is *not* discovered at run time. It's a checked-in manifest
-  (catalog.json) produced by refresh_catalog.py. This kills the "guessed URL"
-  problem that produced hundreds of 404s.
-- For each book in the manifest we download exactly one authoritative artefact:
-  the `<code>dd.zip` bundle served by NCERT, via infra.http.download_file for
-  resumable (HTTP Range + ETag) transfers with built-in retry.
-- Only the PDFs inside each zip are kept. Their names come from NCERT itself,
-  so we never fabricate filenames.
-"""
+"""NCERT textbook scraper: per-book zip downloads, PDF extraction, resume marker."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-import re
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -24,40 +12,52 @@ from infra.http import download_file
 from infra.text import slugify
 
 from .constants import (
+    BOOK_DONE_MARKER,
     BOOK_ZIP_URL_TEMPLATE,
     CATALOG_PATH,
     INPUTS_ROOT,
+    NCERT_ANNEXURE_RE,
+    NCERT_APPENDIX_RE,
+    NCERT_CHAPTER_NUM_RE,
+    NCERT_LITERAL_STEMS,
     USER_AGENT,
     ZIP_CACHE_ROOT,
     ZIP_CONCURRENCY,
-    ZIP_RETRIES,
 )
-from .reporter import ProgressReporter
+from .reporter import StageReporter
 from .types import Book
 
 
 class Scraper:
-    """Downloads per-book NCERT zip bundles and unpacks their PDFs."""
+    """Downloads per-book NCERT zips and unpacks their PDFs. Resumable[Book, str]."""
 
     def __init__(self) -> None:
-        """Initialize the scraper with a concurrency limit for zip downloads."""
         self._semaphore = asyncio.Semaphore(ZIP_CONCURRENCY)
+
+    # --- Resumable[Book, str] ---
+
+    def key(self, book: Book) -> str:
+        """Book-level identity for the resume check."""
+        return book.code
+
+    async def completed_keys(self) -> set[str]:
+        """Codes of every book whose inputs dir carries a `.done` marker."""
+        return {
+            book.code for book in self._load_catalog()
+            if (self._book_dir(book) / BOOK_DONE_MARKER).exists()
+        }
 
     async def run(
         self,
         pdf_queue: asyncio.Queue[Optional[Path]],
-        reporter: ProgressReporter,
+        reporter: StageReporter,
     ) -> None:
-        """Load the manifest, download each book zip, stream PDF paths downstream."""
+        """Scrape missing books, enqueue every book's PDFs, signal end-of-stream."""
         books = self._load_catalog()
-        reporter.grow("scrape", len(books))
-
+        reporter.grow(len(books))
         try:
-            await asyncio.gather(
-                *(self._ingest_book(book, pdf_queue, reporter) for book in books)
-            )
+            await asyncio.gather(*(self._process(b, pdf_queue, reporter) for b in books))
         finally:
-            # Always signal end-of-stream so downstream workers can drain.
             await pdf_queue.put(None)
 
     # --- Catalog ---
@@ -67,40 +67,33 @@ class Scraper:
         raw = json.loads(CATALOG_PATH.read_text())
         return [Book(**entry) for entry in raw]
 
-    # --- Per-book ingestion ---
+    # --- Per-book work ---
 
-    async def _ingest_book(
+    async def _process(
         self,
         book: Book,
         pdf_queue: asyncio.Queue[Optional[Path]],
-        reporter: ProgressReporter,
+        reporter: StageReporter,
     ) -> None:
-        """Download+unpack one book's zip and enqueue each extracted PDF path."""
+        """Ensure a book is scraped (skip via `.done` marker), enqueue its PDFs."""
         book_dir = self._book_dir(book)
         try:
-            pdfs = await self._resolve_book_pdfs(book, book_dir)
-            for pdf_path in pdfs:
+            if not (book_dir / BOOK_DONE_MARKER).exists():
+                await self._download_and_extract(book, book_dir)
+                (book_dir / BOOK_DONE_MARKER).touch()
+            for pdf_path in sorted(book_dir.glob("*.pdf")):
                 await pdf_queue.put(pdf_path)
-            reporter.advance("scrape")
+            reporter.advance()
         except Exception as e:
-            reporter.record_error("scrape", self._zip_url(book), e)
+            reporter.record_error(self._zip_url(book), e)
 
-    async def _resolve_book_pdfs(self, book: Book, book_dir: Path) -> list[Path]:
-        """Return the book's PDFs, downloading+unzipping if not already on disk."""
-        # Fast path: if the book dir is already populated, reuse what's there.
-        # This is how we resume across pipeline runs without re-downloading zips.
-        existing = sorted(book_dir.glob("*.pdf"))
-        if existing:
-            return existing
-
+    async def _download_and_extract(self, book: Book, book_dir: Path) -> list[Path]:
+        """Download the book's zip (cached) and unzip its PDFs into book_dir."""
         zip_path = ZIP_CACHE_ROOT / f"{book.code}.zip"
-        # Cap concurrent NCERT connections; the downloader itself handles
-        # resume, retry, and ETag validation.
         async with self._semaphore:
             await download_file(
                 self._zip_url(book),
                 zip_path,
-                retries=ZIP_RETRIES,
                 headers={"User-Agent": USER_AGENT},
             )
         return self._extract_pdfs(zip_path, book_dir, book)
@@ -110,7 +103,7 @@ class Scraper:
         book_dir.mkdir(parents=True, exist_ok=True)
         extracted: list[Path] = []
         with zipfile.ZipFile(zip_path) as zf:
-            # Only PDFs — zips occasionally carry JPG covers, READMEs, etc.
+            # Zips occasionally include JPG covers / READMEs -- keep only PDFs.
             pdf_entries = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
             for entry in pdf_entries:
                 stem = self._normalize_chapter_stem(entry, book.code)
@@ -129,36 +122,18 @@ class Scraper:
         """NCERT per-book zip URL built from the manifest code."""
         return BOOK_ZIP_URL_TEMPLATE.format(code=book.code)
 
-    # NCERT zip entries are named "<book.code><suffix>.pdf" where suffix
-    # encodes document type: "01".."40" for chapters, plus a small set of
-    # special codes. We translate known suffixes into human-readable chapter
-    # stems (shared across books, so filters like `chapter="chapter-03"`
-    # behave predictably) and fall back to the raw suffix for anything
-    # unrecognized.
-    _CHAPTER_NUM = re.compile(r"^\d{2}$")
-    _APPENDIX_NUM = re.compile(r"^a(\d+)$")
-    _ANNEXURE_NUM = re.compile(r"^ax(\d*)$")
-
     def _normalize_chapter_stem(self, zip_entry: str, book_code: str) -> str:
         """Turn an NCERT zip entry like 'iebe101.pdf' into 'chapter-01'."""
-        # Strip directory prefix and extension; keep only the tail identifier.
         raw = Path(zip_entry).stem
-        # Suffix = whatever follows the book code; if the entry doesn't start
-        # with it, fall back to the raw stem so nothing is silently dropped.
         suffix = raw[len(book_code):] if raw.startswith(book_code) else raw
-
-        if self._CHAPTER_NUM.fullmatch(suffix):
+        if NCERT_CHAPTER_NUM_RE.fullmatch(suffix):
             return f"chapter-{suffix}"
-        if suffix == "ps":
-            return "prelims"
-        if suffix == "an":
-            return "answers"
-        if m := self._APPENDIX_NUM.fullmatch(suffix):
+        if literal := NCERT_LITERAL_STEMS.get(suffix):
+            return literal
+        if m := NCERT_APPENDIX_RE.fullmatch(suffix):
             return f"appendix-{int(m.group(1)):02d}"
-        if m := self._ANNEXURE_NUM.fullmatch(suffix):
+        if m := NCERT_ANNEXURE_RE.fullmatch(suffix):
             tail = f"-{int(m.group(1)):02d}" if m.group(1) else ""
             return f"annexure{tail}"
-        if suffix in ("gl", "glo"):
-            return "glossary"
-        # Unknown suffix: preserve the raw identifier so nothing is ever dropped.
+        # Unknown suffix: preserve raw identifier so nothing is silently dropped.
         return raw

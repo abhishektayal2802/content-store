@@ -1,8 +1,8 @@
 """Pipeline-specific types for the content_store."""
 
-from typing import Literal, Type
+from typing import Literal, Protocol, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from infra.prompts import join_sections
 from infra.rag import CorpusKind, MetadataValue
@@ -10,6 +10,14 @@ from infra.rag import CorpusKind, MetadataValue
 
 # Progress reporter: pipeline stage labels for bars and error rows.
 Stage = Literal["scrape", "extract", "stage", "import"]
+
+
+class Resumable[UnitT, KeyT](Protocol):
+    """Resume contract: map a unit to its sentinel key + list completed keys."""
+
+    def key(self, unit: UnitT) -> KeyT: ...
+
+    async def completed_keys(self) -> set[KeyT]: ...
 
 
 class Book(BaseModel):
@@ -25,31 +33,30 @@ class Book(BaseModel):
     code: str
 
 
-class StagingUnit(BaseModel):
-    """One file about to be uploaded to GCS for a RAG corpus.
+# Per-file metadata attached to a RagFile after import (kind, page_key, etc).
+StagingMetadata = dict[str, MetadataValue]
 
-    Destination corpus is resolved at construction time (so the stager
-    doesn't need a CORPUS_BY_KIND lookup at upload time). `metadata` is
-    the RAG per-file metadata dict that will be attached post-import.
-    """
+
+class StagingUnit(BaseModel):
+    """One file about to be uploaded to GCS for a RAG corpus."""
+
+    model_config = ConfigDict(frozen=True)
 
     corpus: CorpusKind
     display_name: str
     mime: str
     content: bytes
-    metadata: dict[str, MetadataValue]
+    metadata: StagingMetadata
 
 
 class StagedFile(BaseModel):
-    """One file already in GCS, awaiting import + metadata attach.
+    """One file already in GCS, awaiting import + metadata attach."""
 
-    `metadata` is carried forward so the importer can attach it to the
-    RagFile created by the import LRO.
-    """
+    model_config = ConfigDict(frozen=True)
 
     gcs_uri: str
     display_name: str
-    metadata: dict[str, MetadataValue]
+    metadata: StagingMetadata
 
 
 # Manifest the stager hands to the importer: per-corpus list of staged files.
@@ -58,6 +65,8 @@ CorpusManifest = dict[CorpusKind, list[StagedFile]]
 
 class ExtractionSlice(BaseModel):
     """One extraction slice: description and Pydantic response schema."""
+
+    model_config = ConfigDict(frozen=True)
 
     description: str
     response: Type[BaseModel]
