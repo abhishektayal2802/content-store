@@ -101,8 +101,8 @@ class Extractor:
             upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
             extraction = await self._run_slices(upload.uri)
             await page_queue.put(ExtractedPage(meta=meta, pdf_bytes=pdf_bytes, extraction=extraction))
-            await self._files.delete_file(upload)
             reporter.advance()
+            await self._files.delete_file(upload)
         except Exception as e:
             reporter.record_error(meta.page_key, e)
 

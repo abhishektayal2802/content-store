@@ -44,7 +44,7 @@ class Stager:
     async def _stage_page(
         self, page: ExtractedPage, reporter: StageReporter,
     ) -> None:
-        """Upload every unit for one page, then write its sentinel. Page-scoped failure."""
+        """Upload all units for a page; on success write its sentinel."""
         units = list(self._units_for(page))
         reporter.grow(len(units))
         try:
@@ -54,38 +54,55 @@ class Stager:
             reporter.record_error(page.meta.page_key, e)
 
     async def _upload(self, unit: StagingUnit, reporter: StageReporter) -> None:
-        """Upload one unit's bytes to GCS and append its manifest row."""
-        # Content-addressable object path: re-runs overwrite, lifecycle ages stale out.
-        object_name = f"{unit.corpus}/{unit.display_name}{SUFFIX_BY_MIME[unit.mime]}"
-        uri = await self._rag.stage(object_name, unit.content, unit.mime)
-        self.manifest[unit.corpus].append(StagedFile(
-            gcs_uri=uri, display_name=unit.display_name, metadata=unit.metadata,
-        ))
+        """Upload bytes + metadata to GCS; record manifest row."""
+        uri = await self._rag.stage(
+            unit.object_name, unit.content, unit.mime,
+            metadata={k: str(v) for k, v in unit.metadata.items()},
+        )
+        self.manifest[unit.corpus].append(
+            StagedFile(gcs_uri=uri, metadata=unit.metadata)
+        )
         reporter.advance()
 
     def _units_for(self, page: ExtractedPage) -> Iterator[StagingUnit]:
-        """Yield a StagingUnit for the page PDF + every extracted item."""
-        yield StagingUnit(
-            corpus="pages",
-            display_name=page.meta.display_name("pages"),
-            mime="application/pdf",
-            content=page.pdf_bytes,
-            metadata=_metadata(page.meta, "pages"),
-        )
+        """Yield a StagingUnit for the page PDF + one per extracted item."""
+        yield self._unit(page.meta, "pages", page.pdf_bytes, "application/pdf")
         for kind in QUESTION_KINDS + ARTEFACT_KINDS:
             for i, item in enumerate(getattr(page.extraction, kind), 1):
                 difficulty = item.difficulty if kind in QUESTION_KINDS else None
-                yield StagingUnit(
-                    corpus=CORPUS_BY_KIND[kind],
-                    display_name=f"{page.meta.display_name(kind)}__item-{i:03d}",
-                    mime="text/markdown",
-                    content=self._renderer.render(item).encode("utf-8"),
-                    metadata=_metadata(page.meta, kind, difficulty),
+                yield self._unit(
+                    page.meta, kind,
+                    self._renderer.render(item).encode("utf-8"), "text/markdown",
+                    item_suffix=f"__item-{i:03d}", difficulty=difficulty,
                 )
+
+    def _unit(
+        self,
+        meta: PageMeta,
+        kind: ContentKind,
+        content: bytes,
+        mime: str,
+        item_suffix: str = "",
+        difficulty: Optional[str] = None,
+    ) -> StagingUnit:
+        """Build one StagingUnit with its sharded GCS object name."""
+        corpus = CORPUS_BY_KIND[kind]
+        # Shard by book_key to stay under LRO file caps; kind in filename keeps it unique.
+        object_name = (
+            f"{corpus}/{meta.book_key}"
+            f"/{kind}__{meta.page_key}{item_suffix}{SUFFIX_BY_MIME[mime]}"
+        )
+        return StagingUnit(
+            corpus=corpus,
+            object_name=object_name,
+            mime=mime,
+            content=content,
+            metadata=_metadata(meta, kind, difficulty),
+        )
 
 
 def _metadata(meta: PageMeta, kind: ContentKind, difficulty: Optional[str] = None) -> StagingMetadata:
-    """Assemble the per-unit metadata dict from page meta + kind (+ difficulty)."""
+    """Page meta + kind (+ difficulty for questions) as the per-unit metadata dict."""
     out: StagingMetadata = {**meta.model_dump(), "kind": kind}
     if difficulty is not None:
         out["difficulty"] = difficulty

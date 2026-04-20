@@ -8,7 +8,7 @@ from infra.prompts import join_sections
 from infra.rag import CorpusKind, MetadataValue
 
 
-# Progress reporter: pipeline stage labels for bars and error rows.
+# Pipeline stage labels for progress bars and error rows.
 Stage = Literal["scrape", "extract", "stage", "import"]
 
 
@@ -21,29 +21,26 @@ class Resumable[UnitT, KeyT](Protocol):
 
 
 class Book(BaseModel):
-    """One NCERT book entry in the checked-in catalog manifest."""
+    """One NCERT book entry from the catalog manifest."""
 
-    # CBSE grade (9..12).
     grade: int
-    # Canonical slugified subject (matches ALLOWED_SUBJECTS).
     subject: str
-    # Human-readable book title as it appears on ncert.nic.in.
     title: str
     # NCERT asset code (e.g. "iebe1") used to derive the dd.zip URL.
     code: str
 
 
-# Per-file metadata attached to a RagFile after import (kind, page_key, etc).
+# Per-file metadata dict attached on upload + import.
 StagingMetadata = dict[str, MetadataValue]
 
 
 class StagingUnit(BaseModel):
-    """One file about to be uploaded to GCS for a RAG corpus."""
+    """One file queued for upload to GCS."""
 
     model_config = ConfigDict(frozen=True)
 
     corpus: CorpusKind
-    display_name: str
+    object_name: str
     mime: str
     content: bytes
     metadata: StagingMetadata
@@ -55,16 +52,15 @@ class StagedFile(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     gcs_uri: str
-    display_name: str
     metadata: StagingMetadata
 
 
-# Manifest the stager hands to the importer: per-corpus list of staged files.
+# Stager -> Importer handoff.
 CorpusManifest = dict[CorpusKind, list[StagedFile]]
 
 
 class ExtractionSlice(BaseModel):
-    """One extraction slice: description and Pydantic response schema."""
+    """One extraction slice: description + Pydantic response schema."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -73,8 +69,7 @@ class ExtractionSlice(BaseModel):
 
     @property
     def prompt(self) -> str:
-        """Build the full extraction prompt for this slice."""
-
+        """Full extraction prompt = description + standing extraction rules."""
         rules = join_sections(
             "Rules:",
             "- Extract only what is explicitly present on the page.\n"
