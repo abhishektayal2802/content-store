@@ -1,173 +1,182 @@
-"""Reset Vertex corpora and republish from the local extracted cache (direct RagFile upload)."""
+"""Publish from the local cache via GCS bulk import: reset -> stage -> import -> attach."""
 
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Optional
 
-from infra.content import (
-    ARTEFACT_KINDS,
-    CORPUS_BY_KIND,
-    METADATA_SCHEMA,
-    QUESTION_KINDS,
-    ContentKind,
-    ContentMarkdownRenderer,
-    PageExtraction,
-    PageMeta,
-)
-from infra.rag import CorpusKind, MetadataValue, VertexRagWriter
+from infra.constants import Const
+from infra.content import METADATA_SCHEMA
+from infra.rag import CorpusKind, ImportReceipt, ImportStatus, MetadataValue, VertexRagWriter
+from infra.storage import GcsBucket, GcsPath
 
 from .cache import PageCache
 from .constants import INPUTS_ROOT
 from .pdf import split_pdf
 from .reporter import ProgressReporter, StageReporter
-from .types import CachedPage
-
-
-@dataclass(frozen=True)
-class _Unit:
-    """One RagFile to upload + attach metadata for (internal publisher intermediate)."""
-
-    corpus: CorpusKind
-    display_name: str
-    data: bytes
-    suffix: str
-    metadata: dict[str, MetadataValue]
+from .types import CachedPage, ImportShard, PublishUnit
+from .units import UnitBuilder, count_units
 
 
 class Publisher:
-    """Orchestrates the cache -> direct Vertex rebuild as one rebuildable projection."""
+    """Rebuild every corpus from the closed local cache via GCS bulk import."""
 
-    def __init__(self, rag: VertexRagWriter) -> None:
+    def __init__(self, rag: VertexRagWriter, bucket: GcsBucket) -> None:
         self._rag = rag
-        self._renderer = ContentMarkdownRenderer()
+        self._bucket = bucket
+        self._units = UnitBuilder()
+        # One run-scoped gs:// prefix for this publish; bucket TTL owns cleanup.
+        self._run_id = uuid.uuid4().hex[:12]
 
     async def run(self, cache: PageCache, reporter: ProgressReporter) -> None:
-        """Reset remote, ensure corpora/schema, then upload+attach every cached unit."""
+        """reset -> ensure -> stage -> import -> attach over the closed cache."""
         await self._reset(reporter.reset)
-        # Schemas must exist on every corpus before files are uploaded against them.
+        # Schemas must exist (and be visible) before attach; ensure before import.
         await self._rag.ensure_corpora(METADATA_SCHEMA)
-        # Materialize the cache once: we need the full list for totals + chapter grouping.
+        # Materialize once: exact totals + chapter grouping up front.
         cached = list(cache.iter_all())
-        await self._publish_all(cached, reporter.upload, reporter.attach)
+        shards = await self._stage(cached, reporter.stage)
+        await self._import_and_attach(shards, reporter.import_, reporter.attach)
 
     async def _reset(self, reporter: StageReporter) -> None:
-        """Nuke every corpus; publish is a full rebuild from the local cache."""
+        """Nuke every corpus; publish is always a full rebuild from the cache."""
         reporter.grow(1)
         await self._rag.delete_all_corpora()
         reporter.advance()
 
-    async def _publish_all(
-        self,
-        pages: list[CachedPage],
-        upload_reporter: StageReporter,
-        attach_reporter: StageReporter,
-    ) -> None:
-        """Group pages by chapter, load each PDF once, upload+attach pages concurrently."""
-        # Exact totals are knowable up front because the cache is closed.
-        total_units = sum(_count_units(p.extraction) for p in pages)
-        upload_reporter.grow(total_units)
-        attach_reporter.grow(total_units)
-        # Chapter-at-a-time keeps peak memory bounded and reuses each split operation.
+    # --- Stage: upload every unit's bytes to its (corpus, shard) GCS prefix ---
+
+    async def _stage(
+        self, pages: list[CachedPage], reporter: StageReporter,
+    ) -> list[ImportShard]:
+        """Chapter-at-a-time: assign each unit a shard, upload, collect shards."""
+        reporter.grow(sum(count_units(p.extraction) for p in pages))
+        counts: dict[CorpusKind, int] = defaultdict(int)
+        bins: dict[tuple[CorpusKind, int], list[PublishUnit]] = defaultdict(list)
         for chapter_path, group in _group_by_chapter(pages).items():
-            page_bytes = await split_pdf(chapter_path)
-            await asyncio.gather(*[
-                self._publish_page(
+            await self._stage_chapter(chapter_path, group, counts, bins, reporter)
+        return [self._shard(corpus, shard_id, units)
+                for (corpus, shard_id), units in sorted(bins.items())]
+
+    async def _stage_chapter(
+        self,
+        chapter_path: Path,
+        pages: list[CachedPage],
+        counts: dict[CorpusKind, int],
+        bins: dict[tuple[CorpusKind, int], list[PublishUnit]],
+        reporter: StageReporter,
+    ) -> None:
+        """Load one chapter's PDFs, plan shard assignment, upload every unit concurrently."""
+        # Chapter-level bytes load bounds peak memory to ~one chapter's PDFs.
+        page_bytes = await split_pdf(chapter_path)
+        async with asyncio.TaskGroup() as tg:
+            for p in pages:
+                for unit, data in self._units.build(
                     p.meta, page_bytes[p.meta.page - 1], p.extraction,
-                    upload_reporter, attach_reporter,
-                )
-                for p in group
-            ])
+                ):
+                    # Sequential fill: new shard every MAX_FILES_PER_SHARD units per corpus.
+                    shard_id = counts[unit.corpus] // Const.Rag.MAX_FILES_PER_SHARD
+                    counts[unit.corpus] += 1
+                    bins[(unit.corpus, shard_id)].append(unit)
+                    tg.create_task(self._stage_one(unit, shard_id, data, reporter))
 
-    async def _publish_page(
+    async def _stage_one(
+        self, unit: PublishUnit, shard_id: int, data: bytes, reporter: StageReporter,
+    ) -> None:
+        """Upload one unit's bytes to its shard object; advance on success, raise on fail."""
+        await self._bucket.upload(
+            self._object_name(unit, shard_id), data, unit.content_type,
+        )
+        reporter.advance()
+
+    # --- Import + attach: one LRO per shard, receipts drive attach ---
+
+    async def _import_and_attach(
         self,
-        meta: PageMeta,
-        pdf_bytes: bytes,
-        extraction: PageExtraction,
-        upload_reporter: StageReporter,
+        shards: list[ImportShard],
+        import_reporter: StageReporter,
         attach_reporter: StageReporter,
     ) -> None:
-        """Upload every unit for a page concurrently; errors stay scoped to this page."""
-        units = list(self._units_for(meta, pdf_bytes, extraction))
-        try:
-            await asyncio.gather(*(
-                self._publish_unit(u, upload_reporter, attach_reporter) for u in units
-            ))
-        except Exception as e:
-            upload_reporter.record_error(meta.page_key, e)
+        """Run every shard's import->attach as an isolated unit of work; fail-fast."""
+        import_reporter.grow(len(shards))
+        attach_reporter.grow(sum(len(s.units) for s in shards))
+        # Concurrency cap lives on VertexRagWriter (3 LROs in flight per Vertex quota).
+        async with asyncio.TaskGroup() as tg:
+            for shard in shards:
+                tg.create_task(self._run_shard(shard, import_reporter, attach_reporter))
 
-    async def _publish_unit(
-        self,
-        unit: _Unit,
-        upload_reporter: StageReporter,
-        attach_reporter: StageReporter,
+    async def _run_shard(
+        self, shard: ImportShard,
+        import_reporter: StageReporter, attach_reporter: StageReporter,
     ) -> None:
-        """Direct-upload one unit's bytes as a RagFile, then attach its metadata."""
-        rag_file_name = await self._rag.upload_file(
-            unit.corpus, unit.display_name, unit.data, unit.suffix,
-        )
-        upload_reporter.advance()
-        await self._rag.attach_metadata(rag_file_name, unit.metadata)
-        attach_reporter.advance()
+        """Import one shard, parse its receipts, attach metadata to the imported files."""
+        await self._rag.import_shard(shard.corpus, shard.prefix.uri, shard.result_sink.uri)
+        import_reporter.advance()
+        ndjson = await self._bucket.download(shard.result_sink.object_name)
+        receipts = ImportReceipt.parse_ndjson(ndjson)
+        await self._attach_shard(shard, receipts, attach_reporter)
 
-    def _units_for(
-        self,
-        meta: PageMeta,
-        pdf_bytes: bytes,
-        extraction: PageExtraction,
-    ) -> Iterator[_Unit]:
-        yield self._unit(meta, "pages", pdf_bytes, ".pdf", item_index=0)
-        for kind in QUESTION_KINDS + ARTEFACT_KINDS:
-            for i, item in enumerate(getattr(extraction, kind), 1):
-                # Difficulty is a question-only metadata field; skip for artefacts.
-                difficulty = item.difficulty if kind in QUESTION_KINDS else None
-                yield self._unit(
-                    meta, kind,
-                    self._renderer.render(item).encode("utf-8"), ".md",
-                    item_index=i, difficulty=difficulty,
-                )
+    async def _attach_shard(
+        self, shard: ImportShard, receipts: list[ImportReceipt],
+        reporter: StageReporter,
+    ) -> None:
+        """Join receipts back to units by object basename; attach metadata concurrently."""
+        meta_by_object = {u.object_basename: u.metadata for u in shard.units}
+        async with asyncio.TaskGroup() as tg:
+            for r in receipts:
+                tg.create_task(self._attach_one(r, meta_by_object, reporter))
 
-    def _unit(
-        self,
-        meta: PageMeta,
-        kind: ContentKind,
-        data: bytes,
-        suffix: str,
-        item_index: int = 0,
-        difficulty: Optional[str] = None,
-    ) -> _Unit:
-        """Build one upload unit; PageMeta owns the source-id (= display_name) codec."""
-        return _Unit(
-            corpus=CORPUS_BY_KIND[kind],
-            display_name=meta.source_id(kind, item_index),
-            data=data,
-            suffix=suffix,
-            metadata=_metadata(meta, kind, difficulty),
+    async def _attach_one(
+        self, receipt: ImportReceipt,
+        meta_by_object: dict[str, dict[str, MetadataValue]],
+        reporter: StageReporter,
+    ) -> None:
+        """Attach one file's metadata; failed receipts crash the shard loudly."""
+        await self._rag.attach_metadata(receipt.file_id, meta_by_object[receipt.object_basename])
+        reporter.advance()
+
+    # --- GCS address helpers ---
+
+    def _shard(
+        self, corpus: CorpusKind, shard_id: int, units: list[PublishUnit],
+    ) -> ImportShard:
+        """Bind (corpus, shard_id, units) into an ImportShard with its GCS paths."""
+        return ImportShard(
+            corpus=corpus,
+            prefix=self._shard_prefix(corpus, shard_id),
+            result_sink=self._result_sink(corpus, shard_id),
+            units=units,
         )
 
+    def _object_name(self, unit: PublishUnit, shard_id: int) -> str:
+        """GCS object name for one unit under its shard directory."""
+        return f"{self._shard_object_prefix(unit.corpus, shard_id)}{unit.object_basename}"
 
-def _count_units(extraction: PageExtraction) -> int:
-    """Total units a page will produce: 1 page PDF + one per extracted item."""
-    return 1 + sum(len(getattr(extraction, k)) for k in QUESTION_KINDS + ARTEFACT_KINDS)
+    def _shard_prefix(self, corpus: CorpusKind, shard_id: int) -> GcsPath:
+        """Directory prefix the import LRO consumes (trailing slash = recurse)."""
+        return GcsPath(
+            bucket=self._bucket.name,
+            object_name=self._shard_object_prefix(corpus, shard_id),
+        )
 
+    def _result_sink(self, corpus: CorpusKind, shard_id: int) -> GcsPath:
+        """NDJSON receipt path Vertex writes to; kept outside the import prefix."""
+        return GcsPath(
+            bucket=self._bucket.name,
+            object_name=f"runs/{self._run_id}/results/{corpus}-{shard_id:03d}.ndjson",
+        )
 
-def _metadata(
-    meta: PageMeta, kind: ContentKind, difficulty: Optional[str] = None,
-) -> dict[str, MetadataValue]:
-    """Page meta + kind (+ difficulty for questions) as the per-unit metadata dict."""
-    out: dict[str, MetadataValue] = {**meta.model_dump(), "kind": kind}
-    if difficulty is not None:
-        out["difficulty"] = difficulty
-    return out
+    def _shard_object_prefix(self, corpus: CorpusKind, shard_id: int) -> str:
+        """Plain object-name prefix for one shard's files (no gs://, trailing slash)."""
+        return f"runs/{self._run_id}/shards/{corpus}-{shard_id:03d}/"
 
 
 def _group_by_chapter(pages: list[CachedPage]) -> dict[Path, list[CachedPage]]:
-    """Bucket cached pages by their source chapter PDF; preserves page order within a bucket."""
+    """Bucket cached pages by their source chapter PDF; preserves page order within."""
     groups: dict[Path, list[CachedPage]] = defaultdict(list)
-    # Sort pages up front so each chapter's bucket is already in ascending page order.
+    # Sort up front so each chapter's bucket is in ascending page order.
     for page in sorted(pages, key=lambda p: (p.meta.book_key, p.meta.chapter, p.meta.page)):
         groups[_chapter_pdf_path(page)].append(page)
     return groups

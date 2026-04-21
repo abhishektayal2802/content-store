@@ -1,16 +1,19 @@
 """Pipeline-specific types for the content_store."""
 
+from __future__ import annotations
+
 from typing import Literal, Type
 
 from pydantic import BaseModel
 
 from infra.content import PageExtraction, PageMeta
 from infra.prompts import join_sections
+from infra.rag import CorpusKind, MetadataValue, build_rag_display_name
+from infra.storage import GcsPath
 
 
-# Pipeline stage labels for progress bars and error rows.
-# `scrape` + `extract` run together as the streaming phase; the rest are the publish phase.
-Stage = Literal["scrape", "extract", "reset", "upload", "attach"]
+# Streaming (scrape+extract) + publish subphases (reset -> stage -> import -> attach).
+Stage = Literal["scrape", "extract", "reset", "stage", "import", "attach"]
 
 
 class Book(BaseModel):
@@ -51,3 +54,37 @@ class ExtractionSlice(BaseModel):
             "- If nothing is found, return empty lists.",
         )
         return join_sections(self.description, rules)
+
+
+class PublishUnit(BaseModel):
+    """Smallest filter-preserving retrieval unit: one RagFile to publish.
+
+    `source_id` is the retrieval contract (= PageMeta.source_id). Vertex
+    exposes the staged file as `RagFile.display_name = object_basename` after
+    a GCS import, so retrieval strips `suffix` to recover the pure source id.
+    """
+
+    corpus: CorpusKind
+    source_id: str
+    suffix: str
+    content_type: str
+    metadata: dict[str, MetadataValue]
+
+    @property
+    def object_basename(self) -> str:
+        """GCS object basename = source_id + suffix (e.g. "...__item-001.md")."""
+        return build_rag_display_name(self.source_id, self.suffix)
+
+
+class ImportShard(BaseModel):
+    """Smallest remote import unit: one corpus, one GCS prefix, one LRO.
+
+    `prefix` is the gs:// directory every unit was staged under; the import
+    LRO consumes it as a single source URI. `result_sink` is the gs:// NDJSON
+    path into which Vertex writes one receipt per imported file.
+    """
+
+    corpus: CorpusKind
+    prefix: GcsPath
+    result_sink: GcsPath
+    units: list[PublishUnit]

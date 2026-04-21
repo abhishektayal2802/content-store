@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from infra.content import ARTEFACT_KINDS, QUESTION_KINDS
+
 from .types import Stage
 
 # --- Paths ---
@@ -79,13 +81,23 @@ QUEUE_SIZE: int = 64
 # Book-dir marker: present = scraped cleanly; absent = next run re-scrapes.
 BOOK_DONE_MARKER: str = ".done"
 
+# Publish order for extracted non-page units.
+PUBLISH_ITEM_KINDS = QUESTION_KINDS + ARTEFACT_KINDS
+
+# Staged transport shapes for page PDFs vs extracted markdown items.
+PAGE_UNIT_SUFFIX: str = ".pdf"
+PAGE_UNIT_CONTENT_TYPE: str = "application/pdf"
+ITEM_UNIT_SUFFIX: str = ".md"
+ITEM_UNIT_CONTENT_TYPE: str = "text/markdown"
+
 # Progress-bar labels for each pipeline stage (surfaced by ProgressReporter).
-# The publish-phase stages (reset/upload/attach) all have pre-computable totals
-# because they operate over the closed extracted cache, not a live stream.
+# All publish-phase stages have pre-computable totals because they operate over
+# the closed extracted cache, not a live stream.
 STAGE_LABELS: dict[Stage, str] = {
     "scrape": "Scraping PDFs",
     "extract": "Extracting pages",
     "reset": "Resetting remote state",
-    "upload": "Uploading to Vertex",
+    "stage": "Staging to GCS",
+    "import": "Importing shards",
     "attach": "Attaching metadata",
 }

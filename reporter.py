@@ -57,12 +57,13 @@ class ProgressReporter:
         self._tasks: dict[Stage, TaskID] = {}
         self._errors: list[tuple[Stage, str, str]] = []
         # Workers receive one of these views; never the parent.
-        # Stages match the pipeline's two phases: streaming (scrape+extract) and
-        # barrier publish (reset -> upload -> attach).
+        # Streaming phase: scrape+extract. Barrier publish: reset -> stage -> import -> attach.
         self.scrape = StageReporter(self, "scrape")
         self.extract = StageReporter(self, "extract")
         self.reset = StageReporter(self, "reset")
-        self.upload = StageReporter(self, "upload")
+        self.stage = StageReporter(self, "stage")
+        # `import` is a python keyword; expose as `import_` at the attribute site.
+        self.import_ = StageReporter(self, "import")
         self.attach = StageReporter(self, "attach")
 
     @contextmanager
