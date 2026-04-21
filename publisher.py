@@ -9,7 +9,7 @@ from pathlib import Path
 
 from infra.constants import Const
 from infra.content import METADATA_SCHEMA
-from infra.rag import CorpusKind, ImportReceipt, ImportStatus, MetadataValue, VertexRagWriter
+from infra.rag import CorpusKind, ImportReceipt, MetadataValue, VertexRagWriter
 from infra.storage import GcsBucket, GcsPath
 
 from .cache import PageCache
@@ -51,36 +51,38 @@ class Publisher:
     async def _stage(
         self, pages: list[CachedPage], reporter: StageReporter,
     ) -> list[ImportShard]:
-        """Chapter-at-a-time: assign each unit a shard, upload, collect shards."""
+        """Prepare chapters in parallel, then assign shards and upload every unit."""
         reporter.grow(sum(count_units(p.extraction) for p in pages))
         counts: dict[CorpusKind, int] = defaultdict(int)
         bins: dict[tuple[CorpusKind, int], list[PublishUnit]] = defaultdict(list)
-        for chapter_path, group in _group_by_chapter(pages).items():
-            await self._stage_chapter(chapter_path, group, counts, bins, reporter)
-        return [self._shard(corpus, shard_id, units)
-                for (corpus, shard_id), units in sorted(bins.items())]
-
-    async def _stage_chapter(
-        self,
-        chapter_path: Path,
-        pages: list[CachedPage],
-        counts: dict[CorpusKind, int],
-        bins: dict[tuple[CorpusKind, int], list[PublishUnit]],
-        reporter: StageReporter,
-    ) -> None:
-        """Load one chapter's PDFs, plan shard assignment, upload every unit concurrently."""
-        # Chapter-level bytes load bounds peak memory to ~one chapter's PDFs.
-        page_bytes = await split_pdf(chapter_path)
+        chapter_units = await asyncio.gather(*[
+            self._prepare_chapter(chapter_path, group)
+            for chapter_path, group in _group_by_chapter(pages).items()
+        ])
         async with asyncio.TaskGroup() as tg:
-            for p in pages:
-                for unit, data in self._units.build(
-                    p.meta, page_bytes[p.meta.page - 1], p.extraction,
-                ):
+            for units in chapter_units:
+                for unit, data in units:
                     # Sequential fill: new shard every MAX_FILES_PER_SHARD units per corpus.
                     shard_id = counts[unit.corpus] // Const.Rag.MAX_FILES_PER_SHARD
                     counts[unit.corpus] += 1
                     bins[(unit.corpus, shard_id)].append(unit)
                     tg.create_task(self._stage_one(unit, shard_id, data, reporter))
+        return [self._shard(corpus, shard_id, units)
+                for (corpus, shard_id), units in sorted(bins.items())]
+
+    async def _prepare_chapter(
+        self,
+        chapter_path: Path,
+        pages: list[CachedPage],
+    ) -> list[tuple[PublishUnit, bytes]]:
+        """Split one chapter once and materialize every unit's staged payload."""
+        page_bytes = await split_pdf(chapter_path)
+        units: list[tuple[PublishUnit, bytes]] = []
+        for p in pages:
+            units.extend(self._units.build(
+                p.meta, page_bytes[p.meta.page - 1], p.extraction,
+            ))
+        return units
 
     async def _stage_one(
         self, unit: PublishUnit, shard_id: int, data: bytes, reporter: StageReporter,
