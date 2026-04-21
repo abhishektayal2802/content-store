@@ -103,7 +103,6 @@ class Publisher:
     ) -> None:
         """Run every shard's import->attach as an isolated unit of work; fail-fast."""
         import_reporter.grow(len(shards))
-        attach_reporter.grow(sum(len(s.units) for s in shards))
         # Concurrency cap lives on VertexRagWriter (3 LROs in flight per Vertex quota).
         async with asyncio.TaskGroup() as tg:
             for shard in shards:
@@ -118,25 +117,31 @@ class Publisher:
         import_reporter.advance()
         ndjson = await self._bucket.download(shard.result_sink.object_name)
         receipts = ImportReceipt.parse_ndjson(ndjson)
-        await self._attach_shard(shard, receipts, attach_reporter)
+        successful_receipts = [receipt for receipt in receipts if receipt.is_success]
+        attach_reporter.grow(len(successful_receipts))
+        await self._attach_shard(shard, successful_receipts, attach_reporter)
 
     async def _attach_shard(
         self, shard: ImportShard, receipts: list[ImportReceipt],
         reporter: StageReporter,
     ) -> None:
-        """Join receipts back to units by object basename; attach metadata concurrently."""
+        """Join successful receipts back to units by object basename and attach metadata."""
         meta_by_object = {u.object_basename: u.metadata for u in shard.units}
         async with asyncio.TaskGroup() as tg:
             for r in receipts:
-                tg.create_task(self._attach_one(r, meta_by_object, reporter))
+                tg.create_task(self._attach_one(shard.corpus, r, meta_by_object, reporter))
 
     async def _attach_one(
-        self, receipt: ImportReceipt,
+        self, corpus: CorpusKind, receipt: ImportReceipt,
         meta_by_object: dict[str, dict[str, MetadataValue]],
         reporter: StageReporter,
     ) -> None:
-        """Attach one file's metadata; failed receipts crash the shard loudly."""
-        await self._rag.attach_metadata(receipt.file_id, meta_by_object[receipt.object_basename])
+        """Attach metadata for one successfully imported file."""
+        await self._rag.attach_metadata(
+            corpus,
+            receipt.file_id,
+            meta_by_object[receipt.object_basename],
+        )
         reporter.advance()
 
     # --- GCS address helpers ---
