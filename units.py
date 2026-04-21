@@ -14,9 +14,10 @@ from infra.content import (
     ContentMarkdownRenderer,
     PageExtraction,
     PageMeta,
+    QuestionDifficulty,
     QUESTION_KINDS,
+    SourceRef,
 )
-from infra.rag import MetadataValue
 
 from .constants import (
     ITEM_UNIT_CONTENT_TYPE,
@@ -53,9 +54,9 @@ class UnitBuilder:
         kind: ContentKind,
         data: bytes,
         item_index: int,
-        difficulty: Optional[str] = None,
+        difficulty: Optional[QuestionDifficulty] = None,
     ) -> tuple[PublishUnit, bytes]:
-        """Build (PublishUnit, bytes); PageMeta owns the source-id codec."""
+        """Build one publish unit; SourceRef owns the source-id codec."""
         suffix, content_type = (
             (PAGE_UNIT_SUFFIX, PAGE_UNIT_CONTENT_TYPE)
             if kind == "pages"
@@ -63,10 +64,14 @@ class UnitBuilder:
         )
         unit = PublishUnit(
             corpus=CORPUS_BY_KIND[kind],
-            source_id=meta.source_id(kind, item_index),
+            source_id=SourceRef(
+                kind=kind,
+                provenance=meta,
+                difficulty=difficulty,
+                item_index=item_index,
+            ).source_id(),
             suffix=suffix,
             content_type=content_type,
-            metadata=_metadata(meta, kind, difficulty),
         )
         return unit, data
 
@@ -74,13 +79,3 @@ class UnitBuilder:
 def count_units(extraction: PageExtraction) -> int:
     """Total units a page will produce: 1 page PDF + one per extracted item."""
     return 1 + sum(len(getattr(extraction, k)) for k in PUBLISH_ITEM_KINDS)
-
-
-def _metadata(
-    meta: PageMeta, kind: ContentKind, difficulty: Optional[str] = None,
-) -> dict[str, MetadataValue]:
-    """Page meta + kind (+ difficulty for questions) as the per-unit metadata dict."""
-    out: dict[str, MetadataValue] = {**meta.model_dump(), "kind": kind}
-    if difficulty is not None:
-        out["difficulty"] = difficulty
-    return out

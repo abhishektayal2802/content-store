@@ -99,5 +99,4 @@ STAGE_LABELS: dict[Stage, str] = {
     "reset": "Resetting remote state",
     "stage": "Staging to GCS",
     "import": "Importing shards",
-    "attach": "Attaching metadata",
 }

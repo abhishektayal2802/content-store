@@ -1,4 +1,4 @@
-"""Publish from the local cache via GCS bulk import: reset -> stage -> import -> attach."""
+"""Publish from the local cache via GCS bulk import: reset -> stage -> import."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from infra.constants import Const
-from infra.content import METADATA_SCHEMA
-from infra.rag import CorpusKind, ImportReceipt, MetadataValue, VertexRagWriter
+from infra.rag import CorpusKind, VertexRagWriter
 from infra.storage import GcsBucket, GcsPath
 
 from .cache import PageCache
@@ -31,14 +30,13 @@ class Publisher:
         self._run_id = uuid.uuid4().hex[:12]
 
     async def run(self, cache: PageCache, reporter: ProgressReporter) -> None:
-        """reset -> ensure -> stage -> import -> attach over the closed cache."""
+        """reset -> ensure -> stage -> import over the closed cache."""
         await self._reset(reporter.reset)
-        # Schemas must exist (and be visible) before attach; ensure before import.
-        await self._rag.ensure_corpora(METADATA_SCHEMA)
+        await self._rag.ensure_corpora()
         # Materialize once: exact totals + chapter grouping up front.
         cached = list(cache.iter_all())
         shards = await self._stage(cached, reporter.stage)
-        await self._import_and_attach(shards, reporter.import_, reporter.attach)
+        await self._import_shards(shards, reporter.import_)
 
     async def _reset(self, reporter: StageReporter) -> None:
         """Nuke every corpus; publish is always a full rebuild from the cache."""
@@ -54,7 +52,7 @@ class Publisher:
         """Prepare chapters in parallel, then assign shards and upload every unit."""
         reporter.grow(sum(count_units(p.extraction) for p in pages))
         counts: dict[CorpusKind, int] = defaultdict(int)
-        bins: dict[tuple[CorpusKind, int], list[PublishUnit]] = defaultdict(list)
+        shard_keys: set[tuple[CorpusKind, int]] = set()
         chapter_units = await asyncio.gather(*[
             self._prepare_chapter(chapter_path, group)
             for chapter_path, group in _group_by_chapter(pages).items()
@@ -65,10 +63,9 @@ class Publisher:
                     # Sequential fill: new shard every MAX_FILES_PER_SHARD units per corpus.
                     shard_id = counts[unit.corpus] // Const.Rag.MAX_FILES_PER_SHARD
                     counts[unit.corpus] += 1
-                    bins[(unit.corpus, shard_id)].append(unit)
+                    shard_keys.add((unit.corpus, shard_id))
                     tg.create_task(self._stage_one(unit, shard_id, data, reporter))
-        return [self._shard(corpus, shard_id, units)
-                for (corpus, shard_id), units in sorted(bins.items())]
+        return [self._shard(corpus, shard_id) for corpus, shard_id in sorted(shard_keys)]
 
     async def _prepare_chapter(
         self,
@@ -93,69 +90,33 @@ class Publisher:
         )
         reporter.advance()
 
-    # --- Import + attach: one LRO per shard, receipts drive attach ---
+    # --- Import: one LRO per shard ---
 
-    async def _import_and_attach(
+    async def _import_shards(
         self,
         shards: list[ImportShard],
         import_reporter: StageReporter,
-        attach_reporter: StageReporter,
     ) -> None:
-        """Run every shard's import->attach as an isolated unit of work; fail-fast."""
+        """Run every shard import as an isolated unit of work; fail-fast."""
         import_reporter.grow(len(shards))
         # Concurrency cap lives on VertexRagWriter (3 LROs in flight per Vertex quota).
         async with asyncio.TaskGroup() as tg:
             for shard in shards:
-                tg.create_task(self._run_shard(shard, import_reporter, attach_reporter))
+                tg.create_task(self._run_shard(shard, import_reporter))
 
     async def _run_shard(
         self, shard: ImportShard,
-        import_reporter: StageReporter, attach_reporter: StageReporter,
+        import_reporter: StageReporter,
     ) -> None:
-        """Import one shard, parse its receipts, attach metadata to the imported files."""
-        await self._rag.import_shard(shard.corpus, shard.prefix.uri, shard.result_sink.uri)
+        """Import one shard and advance once its LRO resolves."""
+        await self._rag.import_shard(shard.corpus, shard.prefix.uri)
         import_reporter.advance()
-        ndjson = await self._bucket.download(shard.result_sink.object_name)
-        receipts = ImportReceipt.parse_ndjson(ndjson)
-        successful_receipts = [receipt for receipt in receipts if receipt.is_success]
-        attach_reporter.grow(len(successful_receipts))
-        await self._attach_shard(shard, successful_receipts, attach_reporter)
-
-    async def _attach_shard(
-        self, shard: ImportShard, receipts: list[ImportReceipt],
-        reporter: StageReporter,
-    ) -> None:
-        """Join successful receipts back to units by object basename and attach metadata."""
-        meta_by_object = {u.object_basename: u.metadata for u in shard.units}
-        async with asyncio.TaskGroup() as tg:
-            for r in receipts:
-                tg.create_task(self._attach_one(shard.corpus, r, meta_by_object, reporter))
-
-    async def _attach_one(
-        self, corpus: CorpusKind, receipt: ImportReceipt,
-        meta_by_object: dict[str, dict[str, MetadataValue]],
-        reporter: StageReporter,
-    ) -> None:
-        """Attach metadata for one successfully imported file."""
-        await self._rag.attach_metadata(
-            corpus,
-            receipt.file_id,
-            meta_by_object[receipt.object_basename],
-        )
-        reporter.advance()
 
     # --- GCS address helpers ---
 
-    def _shard(
-        self, corpus: CorpusKind, shard_id: int, units: list[PublishUnit],
-    ) -> ImportShard:
-        """Bind (corpus, shard_id, units) into an ImportShard with its GCS paths."""
-        return ImportShard(
-            corpus=corpus,
-            prefix=self._shard_prefix(corpus, shard_id),
-            result_sink=self._result_sink(corpus, shard_id),
-            units=units,
-        )
+    def _shard(self, corpus: CorpusKind, shard_id: int) -> ImportShard:
+        """Bind (corpus, shard_id) into an ImportShard with its GCS prefix."""
+        return ImportShard(corpus=corpus, prefix=self._shard_prefix(corpus, shard_id))
 
     def _object_name(self, unit: PublishUnit, shard_id: int) -> str:
         """GCS object name for one unit under its shard directory."""
@@ -166,13 +127,6 @@ class Publisher:
         return GcsPath(
             bucket=self._bucket.name,
             object_name=self._shard_object_prefix(corpus, shard_id),
-        )
-
-    def _result_sink(self, corpus: CorpusKind, shard_id: int) -> GcsPath:
-        """NDJSON receipt path Vertex writes to; kept outside the import prefix."""
-        return GcsPath(
-            bucket=self._bucket.name,
-            object_name=f"runs/{self._run_id}/results/{corpus}-{shard_id:03d}.ndjson",
         )
 
     def _shard_object_prefix(self, corpus: CorpusKind, shard_id: int) -> str:

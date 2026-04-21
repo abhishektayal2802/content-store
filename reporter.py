@@ -57,14 +57,13 @@ class ProgressReporter:
         self._tasks: dict[Stage, TaskID] = {}
         self._errors: list[tuple[Stage, str, str]] = []
         # Workers receive one of these views; never the parent.
-        # Streaming phase: scrape+extract. Barrier publish: reset -> stage -> import -> attach.
+        # Streaming phase: scrape+extract. Barrier publish: reset -> stage -> import.
         self.scrape = StageReporter(self, "scrape")
         self.extract = StageReporter(self, "extract")
         self.reset = StageReporter(self, "reset")
         self.stage = StageReporter(self, "stage")
         # `import` is a python keyword; expose as `import_` at the attribute site.
         self.import_ = StageReporter(self, "import")
-        self.attach = StageReporter(self, "attach")
 
     @contextmanager
     def live(self) -> Iterator[ProgressReporter]:

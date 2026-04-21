@@ -8,12 +8,12 @@ from pydantic import BaseModel
 
 from infra.content import PageExtraction, PageMeta
 from infra.prompts import join_sections
-from infra.rag import CorpusKind, MetadataValue, build_rag_display_name
+from infra.rag import CorpusKind, build_rag_display_name
 from infra.storage import GcsPath
 
 
-# Streaming (scrape+extract) + publish subphases (reset -> stage -> import -> attach).
-Stage = Literal["scrape", "extract", "reset", "stage", "import", "attach"]
+# Streaming (scrape+extract) + publish subphases (reset -> stage -> import).
+Stage = Literal["scrape", "extract", "reset", "stage", "import"]
 
 
 class Book(BaseModel):
@@ -59,7 +59,7 @@ class ExtractionSlice(BaseModel):
 class PublishUnit(BaseModel):
     """Smallest filter-preserving retrieval unit: one RagFile to publish.
 
-    `source_id` is the retrieval contract (= PageMeta.source_id). Vertex
+    `source_id` is the retrieval contract (= SourceRef.source_id). Vertex
     exposes the staged file as `RagFile.display_name = object_basename` after
     a GCS import, so retrieval strips `suffix` to recover the pure source id.
     """
@@ -68,7 +68,6 @@ class PublishUnit(BaseModel):
     source_id: str
     suffix: str
     content_type: str
-    metadata: dict[str, MetadataValue]
 
     @property
     def object_basename(self) -> str:
@@ -80,11 +79,8 @@ class ImportShard(BaseModel):
     """Smallest remote import unit: one corpus, one GCS prefix, one LRO.
 
     `prefix` is the gs:// directory every unit was staged under; the import
-    LRO consumes it as a single source URI. `result_sink` is the gs:// NDJSON
-    path into which Vertex writes one receipt per imported file.
+    LRO consumes it as a single source URI.
     """
 
     corpus: CorpusKind
     prefix: GcsPath
-    result_sink: GcsPath
-    units: list[PublishUnit]
