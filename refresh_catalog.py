@@ -1,8 +1,9 @@
 """Refresh the checked-in NCERT book catalog manifest.
 
-Fetches ncert.nic.in/textbook.php, parses the JS book tables, keeps books that
-pass our grade/subject allowlist, and writes catalog.json. This is the only
-place that talks to the NCERT HTML catalog; the main pipeline reads catalog.json.
+Fetches ncert.nic.in/textbook.php, parses the JS book tables, resolves subjects
+through the shared curriculum catalog, and writes catalog.json. This is the
+only place that talks to the NCERT HTML catalog; the main pipeline reads
+catalog.json.
 
 Run from the monorepo root:
 
@@ -14,12 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 
+from infra.curriculum import resolve_ncert_subject
 from infra.http import create_client, get_text
-from infra.text import slugify
 
 from .constants import (
-    ALLOWED_GRADES,
-    ALLOWED_SUBJECTS,
     BOOK_GROUP_PATTERN,
     BOOK_OPTION_PATTERN,
     CATALOG_PATH,
@@ -45,9 +44,11 @@ def parse_catalog(html: str) -> list[Book]:
     books: list[Book] = []
     for group in BOOK_GROUP_PATTERN.finditer(normalized):
         grade = int(group.group(1))
-        subject = slugify(group.group(2).strip())
+        subject = resolve_ncert_subject(grade, group.group(2).strip())
+        if subject is None:
+            continue
         body = group.group(3)
-        books.extend(_parse_book_group(grade, subject, body))
+        books.extend(_parse_book_group(grade, subject.value, body))
     return books
 
 
@@ -64,17 +65,6 @@ def _parse_book_group(grade: int, subject: str, body: str) -> list[Book]:
     ]
 
 
-def is_allowed(book: Book) -> bool:
-    """Keep only English-edition books in supported grades/subjects."""
-    # NCERT codes follow a "<lang>e<id>" convention; require English edition.
-    return (
-        book.grade in ALLOWED_GRADES
-        and book.subject in ALLOWED_SUBJECTS
-        and len(book.code) > 1
-        and book.code[1] == "e"
-    )
-
-
 def write_catalog(books: list[Book]) -> None:
     """Persist books to catalog.json in a stable, diff-friendly order."""
     sorted_books = sorted(books, key=lambda b: (b.grade, b.subject, b.code))
@@ -85,7 +75,7 @@ def write_catalog(books: list[Book]) -> None:
 async def main() -> None:
     """Fetch the NCERT catalog, filter, and write the manifest to disk."""
     html = await fetch_catalog_html()
-    books = [b for b in parse_catalog(html) if is_allowed(b)]
+    books = [b for b in parse_catalog(html) if len(b.code) > 1 and b.code[1] == "e"]
     write_catalog(books)
     print(f"Wrote {len(books)} books to {CATALOG_PATH}")
 

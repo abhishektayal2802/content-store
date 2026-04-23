@@ -25,26 +25,6 @@ USER_AGENT = "Mozilla/5.0 (compatible; sujho-content-store/1.0)"
 # Per-book zip bundle served by NCERT. "dd" suffix is NCERT convention.
 BOOK_ZIP_URL_TEMPLATE = f"{NCERT_BASE}textbook/pdf/{{code}}dd.zip"
 
-ALLOWED_GRADES = {9, 10, 11, 12}
-ALLOWED_SUBJECTS = {
-    "accountancy",
-    "biology",
-    "business-studies",
-    "chemistry",
-    "computer-science",
-    "economics",
-    "english",
-    "geography",
-    "hindi",
-    "history",
-    "mathematics",
-    "physics",
-    "political-science",
-    "psychology",
-    "social-science",
-    "sociology",
-}
-
 # Catalog JS patterns — used only by refresh_catalog.py, not the main pipeline.
 BOOK_GROUP_PATTERN = re.compile(
     r'(?:if|else if)\s*\(\(document\.test\.tclass\.value==(\d+)\)\s*&&\s*'

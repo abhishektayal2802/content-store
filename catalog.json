@@ -2,7 +2,7 @@
   {
     "grade": 9,
     "subject": "english",
-    "title": "Beehive",
+    "title": "Kaveri",
     "code": "iebe1"
   },
   {
@@ -20,8 +20,14 @@
   {
     "grade": 9,
     "subject": "mathematics",
-    "title": "Mathematics",
+    "title": "Ganita Manjari (English)",
     "code": "iemh1"
+  },
+  {
+    "grade": 9,
+    "subject": "science",
+    "title": "Exploration",
+    "code": "iesc1"
   },
   {
     "grade": 9,
@@ -70,6 +76,12 @@
     "subject": "mathematics",
     "title": "Mathematics",
     "code": "jemh1"
+  },
+  {
+    "grade": 10,
+    "subject": "science",
+    "title": "Science",
+    "code": "jesc1"
   },
   {
     "grade": 10,
@@ -166,6 +178,12 @@
     "subject": "english",
     "title": "Woven Words",
     "code": "keww1"
+  },
+  {
+    "grade": 11,
+    "subject": "fine-art",
+    "title": "An Introduction to Indian Art Part-I",
+    "code": "kefa1"
   },
   {
     "grade": 11,
@@ -322,6 +340,12 @@
     "subject": "english",
     "title": "Vistas",
     "code": "levt1"
+  },
+  {
+    "grade": 12,
+    "subject": "fine-art",
+    "title": "An Introduction to Indian Art Part-II",
+    "code": "lefa1"
   },
   {
     "grade": 12,
