@@ -16,6 +16,7 @@ from infra.llm import (
     GeminiRuntime,
     InteractionTurn,
     Models,
+    ThinkingLevels,
     UriMediaContent,
 )
 
@@ -124,5 +125,6 @@ class Extractor:
                 content=[UriMediaContent(type="document", uri=uri, mime_type="application/pdf")],
             )],
             response_schema=schema,
+            thinking_level=ThinkingLevels.MEDIUM,
         )
         return interaction.parsed
