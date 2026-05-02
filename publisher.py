@@ -7,9 +7,8 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
-from infra.constants import Const
-from infra.rag import CorpusKind, VertexRagWriter
-from infra.storage import GcsBucket, GcsPath
+from infra.rag import MAX_FILES_PER_SHARD, CorpusKind, VertexRagWriter
+from infra.platform.storage import GcsBucket, GcsPath
 
 from .cache import PageCache
 from .constants import INPUTS_ROOT
@@ -61,7 +60,7 @@ class Publisher:
             for units in chapter_units:
                 for unit, data in units:
                     # Sequential fill: new shard every MAX_FILES_PER_SHARD units per corpus.
-                    shard_id = counts[unit.corpus] // Const.Rag.MAX_FILES_PER_SHARD
+                    shard_id = counts[unit.corpus] // MAX_FILES_PER_SHARD
                     counts[unit.corpus] += 1
                     shard_keys.add((unit.corpus, shard_id))
                     tg.create_task(self._stage_one(unit, shard_id, data, reporter))

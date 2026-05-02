@@ -16,7 +16,7 @@ import asyncio
 import json
 
 from infra.curriculum import resolve_ncert_subject
-from infra.http import create_client, get_text
+from infra.platform.http import create_client, get_text
 
 from .constants import (
     BOOK_GROUP_PATTERN,

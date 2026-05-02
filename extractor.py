@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import io
 from pathlib import Path
 from typing import Optional, Type
 
+from google.genai import types
 from pydantic import BaseModel
 
 from infra.content import PageExtraction, PageMeta
-from infra.llm import GeminiFilesClient, GeminiInteractionsClient, GeminiRuntime, Models
-from infra.llm.types import InteractionTurn, UriMediaContent
+from infra.llm import (
+    GeminiInteractionsClient,
+    GeminiRuntime,
+    InteractionTurn,
+    Models,
+    UriMediaContent,
+)
 
 from .cache import PageCache
 from .pdf import split_pdf
@@ -24,8 +31,8 @@ class Extractor:
     """Splits input PDFs and extracts content via Gemini; caches results to disk."""
 
     def __init__(self, runtime: GeminiRuntime) -> None:
+        self._runtime = runtime
         self._interactions = GeminiInteractionsClient(runtime)
-        self._files = GeminiFilesClient(runtime)
 
     async def run(
         self,
@@ -79,14 +86,17 @@ class Extractor:
     ) -> None:
         """Extract one page end-to-end; errors are scoped so siblings keep working."""
         try:
-            upload = await self._files.upload_bytes(pdf_bytes, "application/pdf")
+            upload = await self._runtime.client.files.upload(
+                file=io.BytesIO(pdf_bytes),
+                config=types.UploadFileConfig(mime_type="application/pdf"),
+            )
             extraction = await self._run_slices(upload.uri)
             # Persist *before* reporting progress -- the cache file is the true checkpoint.
             cache.write(CachedPage(meta=meta, extraction=extraction))
             reporter.advance()
             # Cleanup is best-effort: Gemini TTL will reap anything we leak.
             try:
-                await self._files.delete_file(upload)
+                await self._runtime.client.files.delete(name=upload.name)
             except Exception:
                 pass
         except Exception as e:
@@ -106,7 +116,7 @@ class Extractor:
         schema: Type[T],
     ) -> T:
         """Run one typed extraction call for a single category."""
-        parsed, _ = await self._interactions.chat(
+        interaction = await self._interactions.chat(
             model=Models.SMALL,
             system_instruction=prompt,
             input=[InteractionTurn(
@@ -115,4 +125,4 @@ class Extractor:
             )],
             response_schema=schema,
         )
-        return parsed
+        return interaction.parsed

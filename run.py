@@ -7,11 +7,11 @@ import os
 
 from dotenv import load_dotenv
 
-from infra.gcp import GcpIdentity
+from infra.platform.gcp import GcpIdentity
 from infra.llm import GeminiRuntime
 from infra.rag import VertexRagWriter
-from infra.secrets import SecretReader
-from infra.storage import GcsBucket
+from infra.platform.secrets import SecretReader
+from infra.platform.storage import GcsBucket
 
 from .pipeline import Pipeline
 

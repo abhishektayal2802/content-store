@@ -8,8 +8,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from infra.http import download_file
-from infra.text import slugify
+from infra.platform.http import download_file
+from infra.utils.text import slugify
 
 from .constants import (
     BOOK_DONE_MARKER,

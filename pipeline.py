@@ -12,7 +12,7 @@ from typing import Optional
 
 from infra.llm import GeminiRuntime
 from infra.rag import VertexRagWriter
-from infra.storage import GcsBucket
+from infra.platform.storage import GcsBucket
 
 from .cache import PageCache
 from .constants import QUEUE_SIZE

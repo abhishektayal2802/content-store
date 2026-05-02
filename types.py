@@ -7,9 +7,9 @@ from typing import Literal, Type
 from pydantic import BaseModel
 
 from infra.content import PageExtraction, PageMeta
-from infra.prompts import join_sections
+from infra.utils.prompts import join_sections
 from infra.rag import CorpusKind, build_rag_display_name
-from infra.storage import GcsPath
+from infra.platform.storage import GcsPath
 
 
 # Streaming (scrape+extract) + publish subphases (reset -> stage -> import).
