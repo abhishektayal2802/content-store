@@ -14,7 +14,6 @@ from infra.content import PageExtraction, PageMeta
 from infra.llm import (
     GeminiInteractionsClient,
     GeminiRuntime,
-    InteractionTurn,
     Models,
     ThinkingLevels,
     UriMediaContent,
@@ -120,10 +119,18 @@ class Extractor:
         interaction = await self._interactions.chat(
             model=Models.SMALL,
             system_instruction=prompt,
-            input=[InteractionTurn(
-                role="user",
-                content=[UriMediaContent(type="document", uri=uri, mime_type="application/pdf")],
-            )],
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        UriMediaContent(
+                            type="document",
+                            uri=uri,
+                            mime_type="application/pdf",
+                        ).model_dump(mode="json")
+                    ],
+                }
+            ],
             response_schema=schema,
             thinking_level=ThinkingLevels.MEDIUM,
         )
