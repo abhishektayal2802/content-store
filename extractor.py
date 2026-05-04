@@ -116,7 +116,7 @@ class Extractor:
         schema: Type[T],
     ) -> T:
         """Run one typed extraction call for a single category."""
-        interaction = await self._interactions.chat(
+        return await self._interactions.chat(
             model=Models.SMALL,
             system_instruction=prompt,
             input=[
@@ -134,4 +134,3 @@ class Extractor:
             response_schema=schema,
             thinking_level=ThinkingLevels.MEDIUM,
         )
-        return interaction.parsed
