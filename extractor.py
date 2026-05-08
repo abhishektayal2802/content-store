@@ -3,36 +3,34 @@
 from __future__ import annotations
 
 import asyncio
-import io
+import base64
 from pathlib import Path
-from typing import Optional, Type
-
-from google.genai import types
-from pydantic import BaseModel
+from typing import Optional
 
 from infra.content import PageExtraction, PageMeta
 from infra.llm import (
-    GeminiInteractionsClient,
-    GeminiRuntime,
+    InlineMediaContent,
     Models,
-    ThinkingLevels,
-    UriMediaContent,
+    OpenAIResponsesClient,
+    OpenAIRuntime,
+    ReasoningEfforts,
+    TextContent,
+    Verbosities,
 )
 
 from .cache import PageCache
 from .pdf import split_pdf
-from .prompts import EXTRACTION_SLICES
+from .prompts import EXTRACTION_PROMPT
 from .queues import iter_queue
 from .reporter import StageReporter
 from .types import CachedPage
 
 
 class Extractor:
-    """Splits input PDFs and extracts content via Gemini; caches results to disk."""
+    """Splits input PDFs and extracts content via OpenAI; caches results to disk."""
 
-    def __init__(self, runtime: GeminiRuntime) -> None:
-        self._runtime = runtime
-        self._interactions = GeminiInteractionsClient(runtime)
+    def __init__(self, runtime: OpenAIRuntime) -> None:
+        self._responses = OpenAIResponsesClient(runtime)
 
     async def run(
         self,
@@ -86,51 +84,30 @@ class Extractor:
     ) -> None:
         """Extract one page end-to-end; errors are scoped so siblings keep working."""
         try:
-            upload = await self._runtime.client.files.upload(
-                file=io.BytesIO(pdf_bytes),
-                config=types.UploadFileConfig(mime_type="application/pdf"),
-            )
-            extraction = await self._run_slices(upload.uri)
+            extraction = await self._extract_page(pdf_bytes, f"{meta.page_key}.pdf")
             # Persist *before* reporting progress -- the cache file is the true checkpoint.
             cache.write(CachedPage(meta=meta, extraction=extraction))
             reporter.advance()
-            # Cleanup is best-effort: Gemini TTL will reap anything we leak.
-            try:
-                await self._runtime.client.files.delete(name=upload.name)
-            except Exception:
-                pass
         except Exception as e:
             reporter.record_error(meta.page_key, e)
 
-    async def _run_slices(self, uri: str) -> PageExtraction:
-        """Run all extraction slices in parallel and merge results."""
-        partials = await asyncio.gather(
-            *(self._extract_slice(uri, s.prompt, s.response) for s in EXTRACTION_SLICES)
-        )
-        return PageExtraction(**{k: v for p in partials for k, v in p.model_dump().items()})
+    async def _extract_page(self, pdf_bytes: bytes, filename: str) -> PageExtraction:
+        """Run one structured extraction call for a single page PDF."""
+        conversation_id = await self._responses.create_conversation()
+        encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
 
-    async def _extract_slice[T: BaseModel](
-        self,
-        uri: str,
-        prompt: str,
-        schema: Type[T],
-    ) -> T:
-        """Run one typed extraction call for a single category."""
-        return await self._interactions.chat(
+        return await self._responses.chat(
             model=Models.SMALL,
-            system_instruction=prompt,
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        UriMediaContent(
-                            type="document",
-                            uri=uri,
-                            mime_type="application/pdf",
-                        ).model_dump(mode="json")
-                    ],
-                }
+            conversation_id=conversation_id,
+            system_instruction=EXTRACTION_PROMPT,
+            input_message=[
+                TextContent(text="Extract this single textbook page."),
+                InlineMediaContent(
+                    data=encoded_pdf,
+                    filename=filename,
+                ),
             ],
-            response_schema=schema,
-            thinking_level=ThinkingLevels.MEDIUM,
+            response_schema=PageExtraction,
+            reasoning_effort=ReasoningEfforts.MEDIUM,
+            verbosity=Verbosities.LOW,
         )

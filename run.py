@@ -8,9 +8,8 @@ import os
 from dotenv import load_dotenv
 
 from infra.platform.gcp import GcpIdentity
-from infra.llm import GeminiRuntime
+from infra.llm import OpenAIRuntime
 from infra.rag import VertexRagWriter
-from infra.platform.secrets import SecretReader
 from infra.platform.storage import GcsBucket
 
 from .pipeline import Pipeline
@@ -24,9 +23,8 @@ async def main() -> None:
     gcp = GcpIdentity.from_env()
     # Run-scoped prefixes + bucket TTL own cleanup; no in-process staging cleanup.
     bucket = GcsBucket(os.environ["CONTENT_STORE_GCS_BUCKET"], credentials=gcp.credentials)
-    api_key = SecretReader(gcp).get("GEMINI_API_KEY")
 
-    runtime = GeminiRuntime(api_key)
+    runtime = OpenAIRuntime(os.environ["OPENAI_API_KEY"])
     rag = VertexRagWriter(identity=gcp)
     try:
         await Pipeline(runtime, rag, bucket).run()

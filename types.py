@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, Type
+from typing import Literal
 
 from pydantic import BaseModel
 
 from infra.content import PageExtraction, PageMeta
-from infra.utils.prompts import join_sections
 from infra.rag import CorpusKind, build_rag_display_name
 from infra.platform.storage import GcsPath
 
@@ -36,24 +35,6 @@ class CachedPage(BaseModel):
 
     meta: PageMeta
     extraction: PageExtraction
-
-
-class ExtractionSlice(BaseModel):
-    """One extraction slice: description + Pydantic response schema."""
-
-    description: str
-    response: Type[BaseModel]
-
-    @property
-    def prompt(self) -> str:
-        """Full extraction prompt = description + standing extraction rules."""
-        rules = join_sections(
-            "Rules:",
-            "- Extract only what is explicitly present on the page.\n"
-            "- Do not invent, infer, merge, or normalize away important details.\n"
-            "- If nothing is found, return empty lists.",
-        )
-        return join_sections(self.description, rules)
 
 
 class PublishUnit(BaseModel):

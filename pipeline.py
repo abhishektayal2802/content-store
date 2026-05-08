@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from infra.llm import GeminiRuntime
+from infra.llm import OpenAIRuntime
 from infra.rag import VertexRagWriter
 from infra.platform.storage import GcsBucket
 
@@ -26,7 +26,7 @@ class Pipeline:
     """Two-phase runner: streaming scrape+extract, then barrier publish from cache."""
 
     def __init__(
-        self, runtime: GeminiRuntime, rag: VertexRagWriter, bucket: GcsBucket,
+        self, runtime: OpenAIRuntime, rag: VertexRagWriter, bucket: GcsBucket,
     ) -> None:
         self._scraper = Scraper()
         self._extractor = Extractor(runtime)

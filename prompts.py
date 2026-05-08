@@ -1,22 +1,12 @@
 """Extraction prompts for the content_store LLM extraction pass."""
 
-from infra.content import ArtefactsExtraction, QuestionsExtraction
+from infra.utils.prompts import join_sections
 
-from .types import ExtractionSlice
-
-EXTRACTION_SLICES: tuple[ExtractionSlice, ...] = (
-    ExtractionSlice(
-        description=(
-            "Extract all questions from this textbook page.\n"
-            "Use the response schema to classify them into the appropriate question lists."
-        ),
-        response=QuestionsExtraction,
-    ),
-    ExtractionSlice(
-        description=(
-            "Extract all artefacts from this textbook page.\n"
-            "Use the response schema to classify them into the appropriate artefact lists."
-        ),
-        response=ArtefactsExtraction,
-    ),
+EXTRACTION_PROMPT = join_sections(
+    "Extract all questions and artefacts from this textbook page.",
+    "Use the response schema to classify each item into the appropriate list.",
+    "Rules:",
+    "- Extract only what is explicitly present on the page.\n"
+    "- Do not invent, infer, merge, or normalize away important details.\n"
+    "- If nothing is found for a category, return an empty list.",
 )
