@@ -110,4 +110,6 @@ class Extractor:
             response_schema=PageExtraction,
             reasoning_effort=ReasoningEfforts.MEDIUM,
             verbosity=Verbosities.LOW,
+            functions=(),
+            hosted=(),
         )
