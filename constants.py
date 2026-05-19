@@ -4,8 +4,15 @@ import re
 from pathlib import Path
 
 from infra.content import ARTEFACT_KINDS, QUESTION_KINDS
+from infra.llm import Models, ReasoningEfforts, Verbosities
 
 from .types import Stage
+
+# --- Extraction LLM defaults (gpt-5.4-nano + medium reasoning) ---
+
+EXTRACTION_MODEL = Models.SMALL
+EXTRACTION_REASONING_EFFORT = ReasoningEfforts.MEDIUM
+EXTRACTION_VERBOSITY = Verbosities.LOW
 
 # --- Paths ---
 

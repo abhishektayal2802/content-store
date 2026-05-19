@@ -8,17 +8,14 @@ from pathlib import Path
 from typing import Optional
 
 from infra.content import PageExtraction, PageMeta
-from infra.llm import (
-    InlineMediaContent,
-    Models,
-    OpenAIResponsesClient,
-    OpenAIRuntime,
-    ReasoningEfforts,
-    TextContent,
-    Verbosities,
-)
+from infra.llm import InlineMediaContent, OpenAIResponsesClient, OpenAIRuntime, TextContent
 
 from .cache import PageCache
+from .constants import (
+    EXTRACTION_MODEL,
+    EXTRACTION_REASONING_EFFORT,
+    EXTRACTION_VERBOSITY,
+)
 from .pdf import split_pdf
 from .prompts import EXTRACTION_PROMPT
 from .queues import iter_queue
@@ -97,7 +94,7 @@ class Extractor:
         encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
 
         return await self._responses.chat(
-            model=Models.SMALL,
+            model=EXTRACTION_MODEL,
             conversation_id=conversation_id,
             system_instruction=EXTRACTION_PROMPT,
             input_message=[
@@ -108,8 +105,8 @@ class Extractor:
                 ),
             ],
             response_schema=PageExtraction,
-            reasoning_effort=ReasoningEfforts.MEDIUM,
-            verbosity=Verbosities.LOW,
+            reasoning_effort=EXTRACTION_REASONING_EFFORT,
+            verbosity=EXTRACTION_VERBOSITY,
             functions=(),
             hosted=(),
         )

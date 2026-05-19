@@ -56,6 +56,16 @@ retry automatically on the flaky NCERT host, and cache in `inputs/_zips/`.
 Re-running the pipeline with an already-populated `inputs/<grade>/.../<book>/`
 directory skips the download entirely.
 
+## Extraction model
+
+Page extraction uses OpenAI structured output with:
+
+- Model: `gpt-5.4-nano` (`Models.SMALL`)
+- Reasoning: `medium`
+- Verbosity: `low`
+
+These defaults live in `constants.py` as `EXTRACTION_MODEL`, `EXTRACTION_REASONING_EFFORT`, and `EXTRACTION_VERBOSITY`.
+
 ## Environment
 
 Required:
