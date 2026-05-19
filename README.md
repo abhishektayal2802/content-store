@@ -1,6 +1,6 @@
 # content_store
 
-NCERT textbook ingestion pipeline: download per-book zip bundles → extract page content via Gemini → persist to File Search stores.
+NCERT textbook ingestion pipeline: download per-book zip bundles, extract page content via OpenAI, and publish retrieval units to Vertex RAG corpora.
 
 ## Structure
 
@@ -10,12 +10,11 @@ content_store/
 │   └── _zips/           # Cached per-book NCERT zip bundles (resumable)
 ├── catalog.json         # Checked-in manifest of NCERT books we ingest
 ├── refresh_catalog.py   # Rebuilds catalog.json from ncert.nic.in
-├── types.py             # Pydantic models: Book, ExtractionSlice, Stage
+├── types.py             # Pydantic models: Book, cached pages, publish units, stages
 ├── constants.py         # URLs, patterns, paths, concurrency limits
 ├── scraper.py           # Downloads dd.zip per book via pypdl, unpacks PDFs
-├── extractor.py         # Splits PDFs, runs Gemini extraction per page
-├── persister.py         # Uploads extracted docs to File Search stores
-├── indexer.py           # Polls File Search upload ops until indexed
+├── extractor.py         # Splits PDFs, runs OpenAI structured extraction per page
+├── publisher.py         # Rebuilds Vertex RAG corpora from the local extraction cache
 └── run.py               # Pipeline entrypoint
 ```
 
@@ -63,4 +62,5 @@ Required:
 
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_LOCATION`
-- `GEMINI_API_KEY` (via Secret Manager)
+- `CONTENT_STORE_GCS_BUCKET`
+- `OPENAI_API_KEY` in Secret Manager
