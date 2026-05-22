@@ -10,6 +10,7 @@ from typing import Optional
 from infra.content import PageExtraction, PageMeta
 from infra.llm import InlineMediaContent, OpenAIResponsesClient, OpenAIRuntime, TextContent
 from infra.llm.constants import RESPONSE_CONCURRENCY_LIMIT
+from infra.platform.retry import retry
 
 from .constants import (
     EXTRACTION_MODEL,
@@ -119,6 +120,7 @@ class Extractor:
             await stage.record_error(meta.page_key, e)
             raise
 
+    @retry()
     async def _extract_page(self, pdf_bytes: bytes, filename: str) -> PageExtraction:
         """Run one stateless structured extraction call for a single page PDF."""
         encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
