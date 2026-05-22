@@ -15,6 +15,7 @@ from .constants import (
     BOOK_DONE_MARKER,
     BOOK_ZIP_URL_TEMPLATE,
     CATALOG_PATH,
+    CHAPTER_PDF_URL_TEMPLATE,
     INPUTS_ROOT,
     NCERT_ANNEXURE_RE,
     NCERT_APPENDIX_RE,
@@ -96,20 +97,25 @@ class Scraper:
                 zip_path,
                 headers={"User-Agent": USER_AGENT},
             )
-        return self._extract_pdfs(zip_path, book_dir, book)
+        return await self._extract_pdfs(zip_path, book_dir, book)
 
-    def _extract_pdfs(self, zip_path: Path, book_dir: Path, book: Book) -> list[Path]:
+    async def _extract_pdfs(self, zip_path: Path, book_dir: Path, book: Book) -> list[Path]:
         """Extract each *.pdf from the zip into book_dir with a normalized stem."""
         book_dir.mkdir(parents=True, exist_ok=True)
+        headers = {"User-Agent": USER_AGENT}
         extracted: list[Path] = []
         with zipfile.ZipFile(zip_path) as zf:
             # Zips occasionally include JPG covers / READMEs -- keep only PDFs.
             pdf_entries = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
             for entry in pdf_entries:
-                data = zf.read(entry)
                 stem = self._normalize_chapter_stem(entry, book.code)
                 dest = book_dir / f"{stem}.pdf"
-                dest.write_bytes(data)
+                data = zf.read(entry)
+                if data:
+                    dest.write_bytes(data)
+                else:
+                    # Some NCERT zips ship zero-byte placeholders; fetch the direct PDF.
+                    await download_file(self._chapter_pdf_url(entry), dest, headers=headers)
                 extracted.append(dest)
         return sorted(extracted)
 
@@ -122,6 +128,10 @@ class Scraper:
     def _zip_url(self, book: Book) -> str:
         """NCERT per-book zip URL built from the manifest code."""
         return BOOK_ZIP_URL_TEMPLATE.format(code=book.code)
+
+    def _chapter_pdf_url(self, zip_entry: str) -> str:
+        """Direct NCERT chapter PDF URL for one zip entry filename."""
+        return CHAPTER_PDF_URL_TEMPLATE.format(entry=Path(zip_entry).name)
 
     def _normalize_chapter_stem(self, zip_entry: str, book_code: str) -> str:
         """Turn an NCERT zip entry like 'iebe101.pdf' into 'chapter-01'."""

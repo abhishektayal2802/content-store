@@ -31,6 +31,8 @@ USER_AGENT = "Mozilla/5.0 (compatible; sujho-content-store/1.0)"
 
 # Per-book zip bundle served by NCERT. "dd" suffix is NCERT convention.
 BOOK_ZIP_URL_TEMPLATE = f"{NCERT_BASE}textbook/pdf/{{code}}dd.zip"
+# Direct chapter PDF when a zip entry is empty (known NCERT bundle quirk).
+CHAPTER_PDF_URL_TEMPLATE = f"{NCERT_BASE}textbook/pdf/{{entry}}"
 
 # Catalog JS patterns — used only by refresh_catalog.py, not the main pipeline.
 BOOK_GROUP_PATTERN = re.compile(
