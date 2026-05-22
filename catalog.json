@@ -1,5 +1,269 @@
 [
   {
+    "grade": 6,
+    "subject": "arts",
+    "title": "Kriti-I",
+    "code": "fekr1"
+  },
+  {
+    "grade": 6,
+    "subject": "english",
+    "title": "Poorvi",
+    "code": "fepr1"
+  },
+  {
+    "grade": 6,
+    "subject": "hindi",
+    "title": "Malhar",
+    "code": "fhml1"
+  },
+  {
+    "grade": 6,
+    "subject": "mathematics",
+    "title": "Ganita Prakash",
+    "code": "fegp1"
+  },
+  {
+    "grade": 6,
+    "subject": "sanskrit",
+    "title": "Deepakam",
+    "code": "fsde1"
+  },
+  {
+    "grade": 6,
+    "subject": "science",
+    "title": "Curiosity",
+    "code": "fecu1"
+  },
+  {
+    "grade": 6,
+    "subject": "social-science",
+    "title": "Exploring Society India and Beyond",
+    "code": "fees1"
+  },
+  {
+    "grade": 6,
+    "subject": "urdu",
+    "title": "Khayal",
+    "code": "fuky1"
+  },
+  {
+    "grade": 7,
+    "subject": "arts",
+    "title": "Kriti",
+    "code": "gekr1"
+  },
+  {
+    "grade": 7,
+    "subject": "english",
+    "title": "Poorvi",
+    "code": "gepr1"
+  },
+  {
+    "grade": 7,
+    "subject": "hindi",
+    "title": "Malhar",
+    "code": "ghml1"
+  },
+  {
+    "grade": 7,
+    "subject": "mathematics",
+    "title": "Ganita Prakash",
+    "code": "gegp1"
+  },
+  {
+    "grade": 7,
+    "subject": "mathematics",
+    "title": "Ganita Prakash-II",
+    "code": "gegp2"
+  },
+  {
+    "grade": 7,
+    "subject": "sanskrit",
+    "title": "Deepakam",
+    "code": "gsde1"
+  },
+  {
+    "grade": 7,
+    "subject": "science",
+    "title": "Curiosity",
+    "code": "gecu1"
+  },
+  {
+    "grade": 7,
+    "subject": "social-science",
+    "title": "Exploring Society India and Beyond Part-I",
+    "code": "gees1"
+  },
+  {
+    "grade": 7,
+    "subject": "social-science",
+    "title": "Exploring Society India and Beyond Part-II",
+    "code": "gees2"
+  },
+  {
+    "grade": 7,
+    "subject": "urdu",
+    "title": "Khayal",
+    "code": "guky1"
+  },
+  {
+    "grade": 8,
+    "subject": "arts",
+    "title": "Kriti",
+    "code": "hekr1"
+  },
+  {
+    "grade": 8,
+    "subject": "english",
+    "title": "Honeydew",
+    "code": "hehd1"
+  },
+  {
+    "grade": 8,
+    "subject": "english",
+    "title": "It So Happend",
+    "code": "heih1"
+  },
+  {
+    "grade": 8,
+    "subject": "english",
+    "title": "Poorvi",
+    "code": "hepr1"
+  },
+  {
+    "grade": 8,
+    "subject": "hindi",
+    "title": "Bharat Ki Khoj",
+    "code": "hhbk1"
+  },
+  {
+    "grade": 8,
+    "subject": "hindi",
+    "title": "Durva",
+    "code": "hhdv1"
+  },
+  {
+    "grade": 8,
+    "subject": "hindi",
+    "title": "Malhar",
+    "code": "hhml1"
+  },
+  {
+    "grade": 8,
+    "subject": "hindi",
+    "title": "Sanshipt Budhcharit",
+    "code": "hhsb1"
+  },
+  {
+    "grade": 8,
+    "subject": "hindi",
+    "title": "Vasant",
+    "code": "hhvs1"
+  },
+  {
+    "grade": 8,
+    "subject": "mathematics",
+    "title": "Ganita Prakash Part-I",
+    "code": "hegp1"
+  },
+  {
+    "grade": 8,
+    "subject": "mathematics",
+    "title": "Ganita Prakash Part-II",
+    "code": "hegp2"
+  },
+  {
+    "grade": 8,
+    "subject": "mathematics",
+    "title": "Mathematics",
+    "code": "hemh1"
+  },
+  {
+    "grade": 8,
+    "subject": "sanskrit",
+    "title": "Ruchira",
+    "code": "hhsk1"
+  },
+  {
+    "grade": 8,
+    "subject": "sanskrit",
+    "title": "Deepakam",
+    "code": "hsde1"
+  },
+  {
+    "grade": 8,
+    "subject": "science",
+    "title": "Curiosity",
+    "code": "hecu1"
+  },
+  {
+    "grade": 8,
+    "subject": "science",
+    "title": "Science",
+    "code": "hesc1"
+  },
+  {
+    "grade": 8,
+    "subject": "social-science",
+    "title": "Exploring Society India and Beyond Part-I",
+    "code": "hees1"
+  },
+  {
+    "grade": 8,
+    "subject": "social-science",
+    "title": "Our-Pasts-III",
+    "code": "hess2"
+  },
+  {
+    "grade": 8,
+    "subject": "social-science",
+    "title": "Social And Political Life",
+    "code": "hess3"
+  },
+  {
+    "grade": 8,
+    "subject": "social-science",
+    "title": "Resource And Development(Geography)",
+    "code": "hess4"
+  },
+  {
+    "grade": 8,
+    "subject": "urdu",
+    "title": "Apni Zaban",
+    "code": "huaz1"
+  },
+  {
+    "grade": 8,
+    "subject": "urdu",
+    "title": "Door-Pass",
+    "code": "hudp1"
+  },
+  {
+    "grade": 8,
+    "subject": "urdu",
+    "title": "Jaan Pahechan",
+    "code": "hujp1"
+  },
+  {
+    "grade": 8,
+    "subject": "urdu",
+    "title": "Khayal",
+    "code": "huky1"
+  },
+  {
+    "grade": 8,
+    "subject": "urdu",
+    "title": "Urdu Guldasta (Supl)",
+    "code": "huug1"
+  },
+  {
+    "grade": 9,
+    "subject": "arts",
+    "title": "Madhurima",
+    "code": "iemr1"
+  },
+  {
     "grade": 9,
     "subject": "english",
     "title": "Kaveri",
@@ -7,15 +271,9 @@
   },
   {
     "grade": 9,
-    "subject": "english",
-    "title": "Moments Supplementary Reader",
-    "code": "iemo1"
-  },
-  {
-    "grade": 9,
-    "subject": "english",
-    "title": "Words and Expressions  1",
-    "code": "iewe1"
+    "subject": "hindi",
+    "title": "Ganga",
+    "code": "ihga1"
   },
   {
     "grade": 9,
@@ -25,33 +283,21 @@
   },
   {
     "grade": 9,
+    "subject": "sanskrit",
+    "title": "Sharada",
+    "code": "ihsh1"
+  },
+  {
+    "grade": 9,
     "subject": "science",
     "title": "Exploration",
     "code": "iesc1"
   },
   {
     "grade": 9,
-    "subject": "social-science",
-    "title": "Contemporary India-I",
-    "code": "iess1"
-  },
-  {
-    "grade": 9,
-    "subject": "social-science",
-    "title": "Economics",
-    "code": "iess2"
-  },
-  {
-    "grade": 9,
-    "subject": "social-science",
-    "title": "India and the Contemporary World-I",
-    "code": "iess3"
-  },
-  {
-    "grade": 9,
-    "subject": "social-science",
-    "title": "Democratic Politics-I",
-    "code": "iess4"
+    "subject": "urdu",
+    "title": "Jamuna",
+    "code": "iuju1"
   },
   {
     "grade": 10,
@@ -73,9 +319,51 @@
   },
   {
     "grade": 10,
+    "subject": "hindi",
+    "title": "Kritika",
+    "code": "jhkr1"
+  },
+  {
+    "grade": 10,
+    "subject": "hindi",
+    "title": "Kshitij-2",
+    "code": "jhks1"
+  },
+  {
+    "grade": 10,
+    "subject": "hindi",
+    "title": "Sparsh",
+    "code": "jhsp1"
+  },
+  {
+    "grade": 10,
+    "subject": "hindi",
+    "title": "Sanchayan Bhag-2",
+    "code": "jhsy1"
+  },
+  {
+    "grade": 10,
     "subject": "mathematics",
     "title": "Mathematics",
     "code": "jemh1"
+  },
+  {
+    "grade": 10,
+    "subject": "sanskrit",
+    "title": "Shemushi",
+    "code": "jhsk1"
+  },
+  {
+    "grade": 10,
+    "subject": "sanskrit",
+    "title": "Vyakaranavithi",
+    "code": "jhva1"
+  },
+  {
+    "grade": 10,
+    "subject": "sanskrit",
+    "title": "Abhyaswaan Bhav-II",
+    "code": "jsab1"
   },
   {
     "grade": 10,
@@ -106,6 +394,36 @@
     "subject": "social-science",
     "title": "Democratic Politics",
     "code": "jess4"
+  },
+  {
+    "grade": 10,
+    "subject": "urdu",
+    "title": "Door-Paas",
+    "code": "judp1"
+  },
+  {
+    "grade": 10,
+    "subject": "urdu",
+    "title": "Gulzar-e-Urdu",
+    "code": "juge1"
+  },
+  {
+    "grade": 10,
+    "subject": "urdu",
+    "title": "Jaan Pahechan",
+    "code": "jujp1"
+  },
+  {
+    "grade": 10,
+    "subject": "urdu",
+    "title": "Nawa-e-Urdu",
+    "code": "june1"
+  },
+  {
+    "grade": 10,
+    "subject": "urdu",
+    "title": "Sab Rang",
+    "code": "jusr1"
   },
   {
     "grade": 11,
@@ -205,6 +523,30 @@
   },
   {
     "grade": 11,
+    "subject": "hindi",
+    "title": "Antral",
+    "code": "khan1"
+  },
+  {
+    "grade": 11,
+    "subject": "hindi",
+    "title": "Aroh",
+    "code": "khar1"
+  },
+  {
+    "grade": 11,
+    "subject": "hindi",
+    "title": "Antra",
+    "code": "khat1"
+  },
+  {
+    "grade": 11,
+    "subject": "hindi",
+    "title": "Vitan",
+    "code": "khvt1"
+  },
+  {
+    "grade": 11,
     "subject": "history",
     "title": "Themes in World History",
     "code": "kehs1"
@@ -247,6 +589,18 @@
   },
   {
     "grade": 11,
+    "subject": "sanskrit",
+    "title": "Bhaswati",
+    "code": "khsk1"
+  },
+  {
+    "grade": 11,
+    "subject": "sanskrit",
+    "title": "Shashwati",
+    "code": "khsk2"
+  },
+  {
+    "grade": 11,
     "subject": "sociology",
     "title": "Introducing Sociology",
     "code": "kesy1"
@@ -256,6 +610,30 @@
     "subject": "sociology",
     "title": "Understanding Society",
     "code": "kesy2"
+  },
+  {
+    "grade": 11,
+    "subject": "urdu",
+    "title": "Dhanak",
+    "code": "kudh1"
+  },
+  {
+    "grade": 11,
+    "subject": "urdu",
+    "title": "Gulistan e Adab",
+    "code": "kuga1"
+  },
+  {
+    "grade": 11,
+    "subject": "urdu",
+    "title": "Khyabane Urdu",
+    "code": "kuku1"
+  },
+  {
+    "grade": 11,
+    "subject": "urdu",
+    "title": "Nai Awaz",
+    "code": "kuna1"
   },
   {
     "grade": 12,
@@ -367,6 +745,30 @@
   },
   {
     "grade": 12,
+    "subject": "hindi",
+    "title": "Antral Bhag 2",
+    "code": "lhan1"
+  },
+  {
+    "grade": 12,
+    "subject": "hindi",
+    "title": "Aroh",
+    "code": "lhar1"
+  },
+  {
+    "grade": 12,
+    "subject": "hindi",
+    "title": "Antra",
+    "code": "lhat1"
+  },
+  {
+    "grade": 12,
+    "subject": "hindi",
+    "title": "Vitan",
+    "code": "lhvt1"
+  },
+  {
+    "grade": 12,
     "subject": "history",
     "title": "Themes in Indian History-I",
     "code": "lehs1"
@@ -427,6 +829,18 @@
   },
   {
     "grade": 12,
+    "subject": "sanskrit",
+    "title": "Bhaswati",
+    "code": "lhsk1"
+  },
+  {
+    "grade": 12,
+    "subject": "sanskrit",
+    "title": "Shaswati",
+    "code": "lhsk2"
+  },
+  {
+    "grade": 12,
     "subject": "sociology",
     "title": "Indian Society",
     "code": "lesy1"
@@ -436,5 +850,29 @@
     "subject": "sociology",
     "title": "Social Change and Development in India",
     "code": "lesy2"
+  },
+  {
+    "grade": 12,
+    "subject": "urdu",
+    "title": "Dhanak",
+    "code": "ludh1"
+  },
+  {
+    "grade": 12,
+    "subject": "urdu",
+    "title": "Gulistan-e- Adab",
+    "code": "luga1"
+  },
+  {
+    "grade": 12,
+    "subject": "urdu",
+    "title": "Khayaban-e-Urdu",
+    "code": "luku1"
+  },
+  {
+    "grade": 12,
+    "subject": "urdu",
+    "title": "Nai Awaz",
+    "code": "luna1"
   }
 ]

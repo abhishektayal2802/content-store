@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from infra.curriculum import resolve_ncert_subject
+from infra.curriculum import resolve_ncert_subject, include_book
 from infra.platform.http import create_client, get_text
 
 from .constants import (
@@ -47,22 +47,17 @@ def parse_catalog(html: str) -> list[Book]:
         subject = resolve_ncert_subject(grade, group.group(2).strip())
         if subject is None:
             continue
-        body = group.group(3)
-        books.extend(_parse_book_group(grade, subject.value, body))
+        for match in BOOK_OPTION_PATTERN.finditer(group.group(3)):
+            code = match.group(3).strip()
+            if not include_book(subject, code):
+                continue
+            books.append(Book(
+                grade=grade,
+                subject=subject.value,
+                title=match.group(2).strip(),
+                code=code,
+            ))
     return books
-
-
-def _parse_book_group(grade: int, subject: str, body: str) -> list[Book]:
-    """Parse all book options within one (grade, subject) group."""
-    return [
-        Book(
-            grade=grade,
-            subject=subject,
-            title=m.group(2).strip(),
-            code=m.group(3).strip(),
-        )
-        for m in BOOK_OPTION_PATTERN.finditer(body)
-    ]
 
 
 def write_catalog(books: list[Book]) -> None:
@@ -75,7 +70,7 @@ def write_catalog(books: list[Book]) -> None:
 async def main() -> None:
     """Fetch the NCERT catalog, filter, and write the manifest to disk."""
     html = await fetch_catalog_html()
-    books = [b for b in parse_catalog(html) if len(b.code) > 1 and b.code[1] == "e"]
+    books = parse_catalog(html)
     write_catalog(books)
     print(f"Wrote {len(books)} books to {CATALOG_PATH}")
 

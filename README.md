@@ -36,6 +36,19 @@ python -m content_store.refresh_catalog
 This is the only code that talks to `ncert.nic.in/textbook.php`. Review the
 resulting diff before committing.
 
+### Catalog inclusion policy
+
+`refresh_catalog.py` applies a generic curriculum-driven filter:
+
+- **Content subjects** (math, science, etc.): only books in the chosen
+  instruction language. Today that is English (`DEFAULT_INSTRUCTION_LANGUAGE` in
+  `infra/curriculum/constants.py`, NCERT track code `e`).
+- **Language subjects** (english, hindi, urdu, sanskrit): all NCERT textbooks
+  for that subject, regardless of track letter.
+
+To switch non-language content to another instruction medium (e.g. Hindi),
+change `DEFAULT_INSTRUCTION_LANGUAGE` and re-run the refresh.
+
 ## Run the pipeline
 
 From the monorepo root:
