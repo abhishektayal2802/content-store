@@ -111,14 +111,14 @@ class Extractor:
         pdf_bytes: bytes,
         stage: StageRun,
     ) -> None:
-        """Extract one page end-to-end and fail loudly after recording context."""
+        """Extract one page, caching an empty result after retry exhaustion."""
         try:
             extraction = await self._extract_page(pdf_bytes, f"{meta.page_key}.pdf")
-            await self._storage.write_extracted_page(CachedPage(meta=meta, extraction=extraction))
-            await stage.completed()
         except Exception as e:
             await stage.record_error(meta.page_key, e)
-            raise
+            extraction = PageExtraction()
+        await self._storage.write_extracted_page(CachedPage(meta=meta, extraction=extraction))
+        await stage.completed()
 
     @retry()
     async def _extract_page(self, pdf_bytes: bytes, filename: str) -> PageExtraction:
