@@ -54,7 +54,7 @@ class Scraper:
                 zip_path,
                 headers={"User-Agent": USER_AGENT},
             )
-        await self._upload_pdfs(zip_path, book)
+            await self._upload_pdfs(zip_path, book)
         await stage.completed()
 
     async def _upload_pdfs(self, zip_path: Path, book: Book) -> None:
