@@ -5,6 +5,7 @@ from pathlib import Path
 
 from infra.content import ARTEFACT_KINDS, QUESTION_KINDS
 from infra.llm import Models, ReasoningEfforts, Verbosities
+from infra.llm.constants import RESPONSE_CONCURRENCY_LIMIT
 
 from .types import Stage
 
@@ -13,6 +14,7 @@ from .types import Stage
 EXTRACTION_MODEL = Models.SMALL
 EXTRACTION_REASONING_EFFORT = ReasoningEfforts.MEDIUM
 EXTRACTION_VERBOSITY = Verbosities.LOW
+EXTRACTION_QUEUE_SIZE = RESPONSE_CONCURRENCY_LIMIT * 2
 
 # --- Paths ---
 

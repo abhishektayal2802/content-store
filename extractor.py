@@ -9,10 +9,12 @@ from typing import Optional
 
 from infra.content import PageExtraction, PageMeta
 from infra.llm import InlineMediaContent, OpenAIResponsesClient, OpenAIRuntime, TextContent
+from infra.llm.constants import RESPONSE_CONCURRENCY_LIMIT
 
 from .cache import PageCache
 from .constants import (
     EXTRACTION_MODEL,
+    EXTRACTION_QUEUE_SIZE,
     EXTRACTION_REASONING_EFFORT,
     EXTRACTION_VERBOSITY,
 )
@@ -36,16 +38,20 @@ class Extractor:
         reporter: StageReporter,
     ) -> None:
         """Drain the scraper's PDF queue; extract + cache every not-yet-cached page."""
-        tasks: list[asyncio.Task[None]] = []
-        async for pdf_path in iter_queue(pdf_queue):
-            # Split once per chapter PDF, then filter by cache presence (the resume signal).
-            pages = await self._split_missing(pdf_path, cache)
-            reporter.grow(len(pages))
-            for meta, page_bytes in pages:
-                tasks.append(asyncio.create_task(
-                    self._extract_one(meta, page_bytes, cache, reporter)
-                ))
-        await asyncio.gather(*tasks)
+        page_queue: asyncio.Queue[Optional[tuple[PageMeta, bytes]]] = asyncio.Queue(
+            maxsize=EXTRACTION_QUEUE_SIZE,
+        )
+        async with asyncio.TaskGroup() as tg:
+            for _ in range(RESPONSE_CONCURRENCY_LIMIT):
+                tg.create_task(self._extract_worker(page_queue, cache, reporter))
+            async for pdf_path in iter_queue(pdf_queue):
+                # Split once per chapter PDF, then filter by cache presence (the resume signal).
+                pages = await self._split_missing(pdf_path, cache)
+                reporter.grow(len(pages))
+                for page in pages:
+                    await page_queue.put(page)
+            for _ in range(RESPONSE_CONCURRENCY_LIMIT):
+                await page_queue.put(None)
 
     # --- PDF splitting ---
 
@@ -71,6 +77,16 @@ class Extractor:
         )
 
     # --- LLM extraction ---
+
+    async def _extract_worker(
+        self,
+        page_queue: asyncio.Queue[Optional[tuple[PageMeta, bytes]]],
+        cache: PageCache,
+        reporter: StageReporter,
+    ) -> None:
+        """Drain bounded page work and extract each page with existing cache semantics."""
+        async for meta, page_bytes in iter_queue(page_queue):
+            await self._extract_one(meta, page_bytes, cache, reporter)
 
     async def _extract_one(
         self,
