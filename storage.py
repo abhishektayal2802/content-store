@@ -31,6 +31,18 @@ class ContentStoreStorage:
     def __init__(self, bucket: GcsBucket) -> None:
         self._bucket = bucket
 
+    # --- Catalog ---
+
+    async def write_catalog(self, run_id: str, books: list[Book]) -> None:
+        """Persist the validated NCERT catalog for one run."""
+        data = [book.model_dump(mode="json") for book in books]
+        await self._bucket.upload_json(self._run_object(run_id, "catalog.json"), {"books": data})
+
+    async def read_catalog(self, run_id: str) -> list[Book]:
+        """Read the validated NCERT catalog for one run."""
+        data = await self._bucket.download_json(self._run_object(run_id, "catalog.json"))
+        return [Book.model_validate(book) for book in data["books"]]
+
     # --- Raw chapters ---
 
     async def raw_chapter_exists(self, book: Book, chapter: str) -> bool:

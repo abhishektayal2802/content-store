@@ -1,13 +1,13 @@
 # content_store
 
-NCERT textbook ingestion pipeline: mirror raw PDFs to GCS, extract page content via OpenAI, and publish retrieval units to Vertex RAG corpora.
+NCERT textbook ingestion pipeline: refresh the catalog, mirror raw PDFs to GCS, extract page content via OpenAI, and publish retrieval units to Vertex RAG corpora.
 
 ## Structure
 
 ```
 content_store/
-├── catalog.json         # Checked-in manifest of NCERT books we ingest
-├── refresh_catalog.py   # Rebuilds catalog.json from ncert.nic.in
+├── catalog.json         # Checked-in catalog snapshot for review
+├── refresh_catalog.py   # Builds the validated run catalog from ncert.nic.in
 ├── storage.py           # GCS object naming + content-store state IO
 ├── run_state.py         # GCS stage manifests + structured errors
 ├── types.py             # Pydantic models: Book, cached pages, run state, publish units
@@ -27,15 +27,16 @@ pip install -r content_store/requirements.txt
 
 ## Refresh the NCERT catalog
 
-The pipeline reads books from `catalog.json`. Regenerate it whenever NCERT
-publishes new books (rare):
+Regenerate the checked-in catalog snapshot whenever NCERT publishes new books
+(rare):
 
 ```bash
 python -m content_store.refresh_catalog
 ```
 
-This is the only code that talks to `ncert.nic.in/textbook.php`. Review the
-resulting diff before committing.
+This is the only code that talks to `ncert.nic.in/textbook.php`. It also drops
+stale book entries whose NCERT zip returns 404. Review the resulting diff before
+committing.
 
 ### Catalog inclusion policy
 
@@ -62,21 +63,24 @@ Equivalent explicit stage entrypoints:
 
 ```bash
 export CONTENT_STORE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+python -m content_store.run refresh
 python -m content_store.run scrape
 python -m content_store.run extract
 python -m content_store.run publish
 ```
 
-The scraper downloads exactly one artefact per book: the `<code>dd.zip` bundle
-served by NCERT. It keeps concurrency low, normalizes chapter names, and mirrors
-chapter PDFs into the configured GCS bucket under `raw/`. Extraction writes page
-JSON under `extracted/`. Publish stages run-scoped Vertex import files under
-`runs/<run_id>/staging/`.
+Refresh writes the validated catalog to `runs/<run_id>/catalog.json`, and scrape
+reads that run artifact. The scraper downloads exactly one artefact per book:
+the `<code>dd.zip` bundle served by NCERT. It keeps concurrency low, normalizes
+chapter names, and mirrors chapter PDFs into the configured GCS bucket under
+`raw/`. Extraction writes page JSON under `extracted/`. Publish writes
+run-scoped Vertex import files under `runs/<run_id>/staging/`.
 
 Cloud Run Jobs use the same stage entrypoint:
 
 ```bash
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+gcloud run jobs execute content-store-refresh --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-scrape --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-extract --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-publish --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait

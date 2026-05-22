@@ -230,32 +230,8 @@
   {
     "grade": 8,
     "subject": "urdu",
-    "title": "Apni Zaban",
-    "code": "huaz1"
-  },
-  {
-    "grade": 8,
-    "subject": "urdu",
-    "title": "Door-Pass",
-    "code": "hudp1"
-  },
-  {
-    "grade": 8,
-    "subject": "urdu",
-    "title": "Jaan Pahechan",
-    "code": "hujp1"
-  },
-  {
-    "grade": 8,
-    "subject": "urdu",
     "title": "Khayal",
     "code": "huky1"
-  },
-  {
-    "grade": 8,
-    "subject": "urdu",
-    "title": "Urdu Guldasta (Supl)",
-    "code": "huug1"
   },
   {
     "grade": 9,

@@ -23,6 +23,7 @@ from .constants import (
 )
 from .extractor import Extractor
 from .publisher import Publisher
+from .refresh_catalog import CatalogRefresher
 from .run_state import StageRun
 from .scraper import Scraper
 from .storage import ContentStoreStorage
@@ -60,8 +61,10 @@ async def _run_stage(
 ) -> None:
     """Dispatch one strict content-store stage."""
     match stage:
+        case "refresh":
+            await CatalogRefresher(storage, run_id).run(stage_run)
         case "scrape":
-            await Scraper(storage).run(stage_run)
+            await Scraper(storage, run_id).run(stage_run)
         case "extract":
             await _run_extract(gcp, storage, stage_run, task_index, task_count)
         case "publish":

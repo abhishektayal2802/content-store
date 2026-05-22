@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import tempfile
 import zipfile
 from pathlib import Path
@@ -12,7 +11,6 @@ from infra.platform.http import download_file, get_bytes
 
 from .constants import (
     BOOK_ZIP_URL_TEMPLATE,
-    CATALOG_PATH,
     CHAPTER_PDF_URL_TEMPLATE,
     NCERT_ANNEXURE_RE,
     NCERT_APPENDIX_RE,
@@ -29,13 +27,14 @@ from .types import Book
 class Scraper:
     """Downloads NCERT zips and uploads normalized chapter PDFs to GCS."""
 
-    def __init__(self, storage: ContentStoreStorage) -> None:
+    def __init__(self, storage: ContentStoreStorage, run_id: str) -> None:
         self._storage = storage
+        self._run_id = run_id
         self._semaphore = asyncio.Semaphore(ZIP_CONCURRENCY)
 
     async def run(self, stage: StageRun) -> None:
         """Mirror every catalog book into raw GCS chapter PDFs."""
-        books = self._load_catalog()
+        books = await self._storage.read_catalog(self._run_id)
         await stage.start(len(books))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -43,13 +42,6 @@ class Scraper:
                 self._process(book, root, stage)
                 for book in books
             ])
-
-    # --- Catalog ---
-
-    def _load_catalog(self) -> list[Book]:
-        """Read the checked-in catalog manifest into validated Book objects."""
-        raw = json.loads(CATALOG_PATH.read_text())
-        return [Book(**entry) for entry in raw]
 
     # --- Per-book mirroring ---
 
