@@ -1,4 +1,4 @@
-"""Pipeline-specific types for the content_store."""
+"""Pipeline-specific Pydantic models for the content_store."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from infra.rag import CorpusKind, build_rag_display_name
 from infra.platform.storage import GcsPath
 
 
-# Streaming (scrape+extract) + publish subphases (reset -> stage -> import).
-Stage = Literal["scrape", "extract", "reset", "stage", "import"]
+ContentStoreStage = Literal["scrape", "extract", "publish"]
+StageStatus = Literal["running", "succeeded", "failed"]
 
 
 class Book(BaseModel):
@@ -28,13 +28,50 @@ class Book(BaseModel):
 class CachedPage(BaseModel):
     """One page's durable extraction record: the extract-resume unit of truth.
 
-    Persisted as JSON under `EXTRACTED_ROOT`. PDF bytes are intentionally *not*
-    stored here; they are a deterministic function of the chapter PDF on disk
-    and are re-materialized by the publisher on demand.
+    Persisted as JSON under the GCS extracted prefix. PDF bytes are intentionally
+    not stored here; they are re-materialized from the raw chapter PDF.
     """
 
     meta: PageMeta
     extraction: PageExtraction
+
+
+class RawChapter(BaseModel):
+    """One durable raw chapter PDF mirrored from NCERT into GCS."""
+
+    grade: int
+    subject: str
+    book: str
+    chapter: str
+    object_name: str
+
+
+class StageManifest(BaseModel):
+    """One stage's compact progress counters."""
+
+    run_id: str
+    stage: ContentStoreStage
+    status: StageStatus
+    total: int
+    completed: int
+    skipped: int
+    failed: int
+    task_index: int
+    task_count: int
+    started_at: str
+    updated_at: str
+
+
+class RunError(BaseModel):
+    """One structured failure record for a stage-task JSONL object."""
+
+    run_id: str
+    stage: ContentStoreStage
+    context: str
+    error_type: str
+    message: str
+    task_index: int
+    timestamp: str
 
 
 class PublishUnit(BaseModel):

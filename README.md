@@ -1,26 +1,27 @@
 # content_store
 
-NCERT textbook ingestion pipeline: download per-book zip bundles, extract page content via OpenAI, and publish retrieval units to Vertex RAG corpora.
+NCERT textbook ingestion pipeline: mirror raw PDFs to GCS, extract page content via OpenAI, and publish retrieval units to Vertex RAG corpora.
 
 ## Structure
 
 ```
 content_store/
-├── inputs/              # Unpacked PDFs (grade/subject/book/chapter.pdf)
-│   └── _zips/           # Cached per-book NCERT zip bundles (resumable)
 ├── catalog.json         # Checked-in manifest of NCERT books we ingest
 ├── refresh_catalog.py   # Rebuilds catalog.json from ncert.nic.in
-├── types.py             # Pydantic models: Book, cached pages, publish units, stages
+├── storage.py           # GCS object naming + content-store state IO
+├── run_state.py         # GCS stage manifests + structured errors
+├── types.py             # Pydantic models: Book, cached pages, run state, publish units
 ├── constants.py         # URLs, patterns, paths, concurrency limits
-├── scraper.py           # Downloads dd.zip per book via pypdl, unpacks PDFs
-├── extractor.py         # Splits PDFs, runs OpenAI structured extraction per page
-├── publisher.py         # Rebuilds Vertex RAG corpora from the local extraction cache
+├── scraper.py           # Mirrors NCERT dd.zip chapter PDFs into raw/ GCS
+├── extractor.py         # Splits raw GCS PDFs, runs OpenAI extraction per page
+├── publisher.py         # Rebuilds Vertex RAG corpora from extracted/ GCS
 └── run.py               # Pipeline entrypoint
 ```
 
 ## Install
 
 ```bash
+pip install -e ./infra
 pip install -r content_store/requirements.txt
 ```
 
@@ -57,17 +58,29 @@ From the monorepo root:
 python run_content_store.py
 ```
 
-Equivalent module entrypoint:
+Equivalent explicit stage entrypoints:
 
 ```bash
-python -m content_store.run
+export CONTENT_STORE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+python -m content_store.run scrape
+python -m content_store.run extract
+python -m content_store.run publish
 ```
 
 The scraper downloads exactly one artefact per book: the `<code>dd.zip` bundle
-served by NCERT. Downloads are resumable (pypdl handles HTTP Range + ETag),
-retry automatically on the flaky NCERT host, and cache in `inputs/_zips/`.
-Re-running the pipeline with an already-populated `inputs/<grade>/.../<book>/`
-directory skips the download entirely.
+served by NCERT. It keeps concurrency low, normalizes chapter names, and mirrors
+chapter PDFs into the configured GCS bucket under `raw/`. Extraction writes page
+JSON under `extracted/`. Publish stages run-scoped Vertex import files under
+`runs/<run_id>/staging/`.
+
+Cloud Run Jobs use the same stage entrypoint:
+
+```bash
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+gcloud run jobs execute content-store-scrape --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
+gcloud run jobs execute content-store-extract --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
+gcloud run jobs execute content-store-publish --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
+```
 
 ## Extraction model
 

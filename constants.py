@@ -7,8 +7,6 @@ from infra.content import ARTEFACT_KINDS, QUESTION_KINDS
 from infra.llm import Models, ReasoningEfforts, Verbosities
 from infra.llm.constants import RESPONSE_CONCURRENCY_LIMIT
 
-from .types import Stage
-
 # --- Extraction LLM defaults (gpt-5.4-nano + medium reasoning) ---
 
 EXTRACTION_MODEL = Models.SMALL
@@ -16,14 +14,9 @@ EXTRACTION_REASONING_EFFORT = ReasoningEfforts.MEDIUM
 EXTRACTION_VERBOSITY = Verbosities.LOW
 EXTRACTION_QUEUE_SIZE = RESPONSE_CONCURRENCY_LIMIT * 2
 
-# --- Paths ---
+# --- Local code/data paths ---
 
-INPUTS_ROOT: Path = Path(__file__).parent / "inputs"
-# Durable per-page extraction cache; mirrors the INPUTS_ROOT layout one-to-one.
-# Cache presence is the extract-stage resume signal -- no remote state involved.
-EXTRACTED_ROOT: Path = Path(__file__).parent / "extracted"
 CATALOG_PATH: Path = Path(__file__).parent / "catalog.json"
-ZIP_CACHE_ROOT: Path = INPUTS_ROOT / "_zips"
 
 # --- NCERT source ---
 
@@ -68,9 +61,16 @@ NCERT_LITERAL_STEMS: dict[str, str] = {
 
 # --- Pipeline constants ---
 
-QUEUE_SIZE: int = 64
-# Book-dir marker: present = scraped cleanly; absent = next run re-scrapes.
-BOOK_DONE_MARKER: str = ".done"
+CONTENT_STORE_RUN_ID_ENV: str = "CONTENT_STORE_RUN_ID"
+CLOUD_RUN_TASK_INDEX_ENV: str = "CLOUD_RUN_TASK_INDEX"
+CLOUD_RUN_TASK_COUNT_ENV: str = "CLOUD_RUN_TASK_COUNT"
+
+RAW_PREFIX: str = "raw"
+EXTRACTED_PREFIX: str = "extracted"
+RUNS_PREFIX: str = "runs"
+STAGING_PREFIX: str = "staging"
+
+TELEMETRY_FLUSH_UNITS: int = 100
 
 # Publish order for extracted non-page units.
 PUBLISH_ITEM_KINDS = QUESTION_KINDS + ARTEFACT_KINDS
@@ -80,14 +80,4 @@ PAGE_UNIT_SUFFIX: str = ".pdf"
 PAGE_UNIT_CONTENT_TYPE: str = "application/pdf"
 ITEM_UNIT_SUFFIX: str = ".md"
 ITEM_UNIT_CONTENT_TYPE: str = "text/markdown"
-
-# Progress-bar labels for each pipeline stage (surfaced by ProgressReporter).
-# All publish-phase stages have pre-computable totals because they operate over
-# the closed extracted cache, not a live stream.
-STAGE_LABELS: dict[Stage, str] = {
-    "scrape": "Scraping PDFs",
-    "extract": "Extracting pages",
-    "reset": "Resetting remote state",
-    "stage": "Staging to GCS",
-    "import": "Importing shards",
-}
+JSONL_CONTENT_TYPE: str = "application/jsonl"

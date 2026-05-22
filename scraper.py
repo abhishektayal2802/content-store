@@ -1,65 +1,48 @@
-"""NCERT textbook scraper: per-book zip downloads, PDF extraction, resume marker."""
+"""NCERT textbook scraper: low-concurrency mirror into raw GCS PDFs."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
-from infra.platform.http import download_file
-from infra.utils.text import slugify
+from infra.platform.http import download_file, get_bytes
 
 from .constants import (
-    BOOK_DONE_MARKER,
     BOOK_ZIP_URL_TEMPLATE,
     CATALOG_PATH,
     CHAPTER_PDF_URL_TEMPLATE,
-    INPUTS_ROOT,
     NCERT_ANNEXURE_RE,
     NCERT_APPENDIX_RE,
     NCERT_CHAPTER_NUM_RE,
     NCERT_LITERAL_STEMS,
     USER_AGENT,
-    ZIP_CACHE_ROOT,
     ZIP_CONCURRENCY,
 )
-from .reporter import StageReporter
+from .run_state import StageRun
+from .storage import ContentStoreStorage
 from .types import Book
 
 
 class Scraper:
-    """Downloads per-book NCERT zips and unpacks their PDFs. Resumable[Book, str]."""
+    """Downloads NCERT zips and uploads normalized chapter PDFs to GCS."""
 
-    def __init__(self) -> None:
+    def __init__(self, storage: ContentStoreStorage) -> None:
+        self._storage = storage
         self._semaphore = asyncio.Semaphore(ZIP_CONCURRENCY)
 
-    # --- Resumable[Book, str] ---
-
-    def key(self, book: Book) -> str:
-        """Book-level identity for the resume check."""
-        return book.code
-
-    async def completed_keys(self) -> set[str]:
-        """Codes of every book whose inputs dir carries a `.done` marker."""
-        return {
-            book.code for book in self._load_catalog()
-            if (self._book_dir(book) / BOOK_DONE_MARKER).exists()
-        }
-
-    async def run(
-        self,
-        pdf_queue: asyncio.Queue[Optional[Path]],
-        reporter: StageReporter,
-    ) -> None:
-        """Scrape missing books, enqueue every book's PDFs, signal end-of-stream."""
+    async def run(self, stage: StageRun) -> None:
+        """Mirror every catalog book into raw GCS chapter PDFs."""
         books = self._load_catalog()
-        reporter.grow(len(books))
-        try:
-            await asyncio.gather(*(self._process(b, pdf_queue, reporter) for b in books))
-        finally:
-            await pdf_queue.put(None)
+        await stage.start(len(books))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            await asyncio.gather(*[
+                self._process(book, root, stage)
+                for book in books
+            ])
 
     # --- Catalog ---
 
@@ -68,62 +51,33 @@ class Scraper:
         raw = json.loads(CATALOG_PATH.read_text())
         return [Book(**entry) for entry in raw]
 
-    # --- Per-book work ---
+    # --- Per-book mirroring ---
 
-    async def _process(
-        self,
-        book: Book,
-        pdf_queue: asyncio.Queue[Optional[Path]],
-        reporter: StageReporter,
-    ) -> None:
-        """Ensure a book is scraped (skip via `.done` marker), enqueue its PDFs."""
-        book_dir = self._book_dir(book)
-        try:
-            if not (book_dir / BOOK_DONE_MARKER).exists():
-                await self._download_and_extract(book, book_dir)
-                (book_dir / BOOK_DONE_MARKER).touch()
-            for pdf_path in sorted(book_dir.glob("*.pdf")):
-                await pdf_queue.put(pdf_path)
-            reporter.advance()
-        except Exception as e:
-            reporter.record_error(self._zip_url(book), e)
-
-    async def _download_and_extract(self, book: Book, book_dir: Path) -> list[Path]:
-        """Download the book's zip (cached) and unzip its PDFs into book_dir."""
-        zip_path = ZIP_CACHE_ROOT / f"{book.code}.zip"
+    async def _process(self, book: Book, root: Path, stage: StageRun) -> None:
+        """Download one NCERT book zip and upload its missing chapter PDFs."""
+        zip_path = root / f"{book.code}.zip"
         async with self._semaphore:
             await download_file(
                 self._zip_url(book),
                 zip_path,
                 headers={"User-Agent": USER_AGENT},
             )
-        return await self._extract_pdfs(zip_path, book_dir, book)
+        await self._upload_pdfs(zip_path, book)
+        await stage.completed()
 
-    async def _extract_pdfs(self, zip_path: Path, book_dir: Path, book: Book) -> list[Path]:
-        """Extract each *.pdf from the zip into book_dir with a normalized stem."""
-        book_dir.mkdir(parents=True, exist_ok=True)
+    async def _upload_pdfs(self, zip_path: Path, book: Book) -> None:
+        """Upload each PDF entry in one zip as a normalized raw GCS chapter."""
         headers = {"User-Agent": USER_AGENT}
-        extracted: list[Path] = []
         with zipfile.ZipFile(zip_path) as zf:
-            # Zips occasionally include JPG covers / READMEs -- keep only PDFs.
             pdf_entries = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
             for entry in pdf_entries:
                 stem = self._normalize_chapter_stem(entry, book.code)
-                dest = book_dir / f"{stem}.pdf"
-                data = zf.read(entry)
-                if data:
-                    dest.write_bytes(data)
-                else:
-                    # Some NCERT zips ship zero-byte placeholders; fetch the direct PDF.
-                    await download_file(self._chapter_pdf_url(entry), dest, headers=headers)
-                extracted.append(dest)
-        return sorted(extracted)
+                if await self._storage.raw_chapter_exists(book, stem):
+                    continue
+                data = zf.read(entry) or await get_bytes(self._chapter_pdf_url(entry), headers=headers)
+                await self._storage.upload_raw_chapter(book, stem, data)
 
     # --- Naming ---
-
-    def _book_dir(self, book: Book) -> Path:
-        """Directory under inputs/ that holds one book's extracted PDFs."""
-        return INPUTS_ROOT / str(book.grade) / book.subject / slugify(book.title)
 
     def _zip_url(self, book: Book) -> str:
         """NCERT per-book zip URL built from the manifest code."""
