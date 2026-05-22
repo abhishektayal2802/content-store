@@ -106,9 +106,10 @@ class Scraper:
             # Zips occasionally include JPG covers / READMEs -- keep only PDFs.
             pdf_entries = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
             for entry in pdf_entries:
+                data = zf.read(entry)
                 stem = self._normalize_chapter_stem(entry, book.code)
                 dest = book_dir / f"{stem}.pdf"
-                dest.write_bytes(zf.read(entry))
+                dest.write_bytes(data)
                 extracted.append(dest)
         return sorted(extracted)
 
