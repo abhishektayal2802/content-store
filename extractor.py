@@ -105,13 +105,12 @@ class Extractor:
             reporter.record_error(meta.page_key, e)
 
     async def _extract_page(self, pdf_bytes: bytes, filename: str) -> PageExtraction:
-        """Run one structured extraction call for a single page PDF."""
-        conversation_id = await self._responses.create_conversation()
+        """Run one stateless structured extraction call for a single page PDF."""
         encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
 
         return await self._responses.chat(
             model=EXTRACTION_MODEL,
-            conversation_id=conversation_id,
+            conversation_id=None,
             system_instruction=EXTRACTION_PROMPT,
             input_message=[
                 TextContent(text="Extract this single textbook page."),
