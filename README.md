@@ -79,6 +79,12 @@ run-scoped Vertex import files under `runs/<run_id>/staging/`.
 Cloud Run Jobs use the same stage entrypoint:
 
 ```bash
+python run_content_store_cloud.py
+```
+
+Equivalent manual commands:
+
+```bash
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 gcloud run jobs execute content-store-refresh --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-scrape --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait

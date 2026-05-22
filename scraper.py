@@ -36,25 +36,24 @@ class Scraper:
         """Mirror every catalog book into raw GCS chapter PDFs."""
         books = await self._storage.read_catalog(self._run_id)
         await stage.start(len(books))
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            await asyncio.gather(*[
-                self._process(book, root, stage)
-                for book in books
-            ])
+        await asyncio.gather(*[
+            self._process(book, stage)
+            for book in books
+        ])
 
     # --- Per-book mirroring ---
 
-    async def _process(self, book: Book, root: Path, stage: StageRun) -> None:
+    async def _process(self, book: Book, stage: StageRun) -> None:
         """Download one NCERT book zip and upload its missing chapter PDFs."""
-        zip_path = root / f"{book.code}.zip"
         async with self._semaphore:
-            await download_file(
-                self._zip_url(book),
-                zip_path,
-                headers={"User-Agent": USER_AGENT},
-            )
-            await self._upload_pdfs(zip_path, book)
+            with tempfile.TemporaryDirectory() as tmp:
+                zip_path = Path(tmp) / f"{book.code}.zip"
+                await download_file(
+                    self._zip_url(book),
+                    zip_path,
+                    headers={"User-Agent": USER_AGENT},
+                )
+                await self._upload_pdfs(zip_path, book)
         await stage.completed()
 
     async def _upload_pdfs(self, zip_path: Path, book: Book) -> None:
