@@ -7,15 +7,18 @@ NCERT textbook ingestion pipeline: refresh the catalog, mirror raw PDFs to GCS, 
 ```
 content_store/
 ├── catalog.json         # Checked-in catalog snapshot for review
+├── run.py               # Cloud/local stage entrypoint (refresh → scrape → extract → publish)
 ├── refresh_catalog.py   # Builds the validated run catalog from ncert.nic.in
-├── storage.py           # GCS object naming + content-store state IO
-├── run_state.py         # GCS stage manifests + structured errors
-├── types.py             # Pydantic models: Book, cached pages, run state, publish units
-├── constants.py         # URLs, patterns, paths, concurrency limits
 ├── scraper.py           # Mirrors NCERT dd.zip chapter PDFs into raw/ GCS
 ├── extractor.py         # Splits raw GCS PDFs, runs OpenAI extraction per page
 ├── publisher.py         # Rebuilds Vertex RAG corpora from extracted/ GCS
-└── run.py               # Pipeline entrypoint
+├── storage.py           # GCS object naming + content-store state IO
+├── run_state.py         # GCS stage manifests + structured errors
+├── units.py             # Cached page → publish-unit projection
+├── pdf.py               # PDF page splitting (shared by extract + publish)
+├── prompts.py           # LLM extraction prompt text
+├── types.py             # Pydantic models: Book, cached pages, run state, publish units
+└── constants.py         # URLs, patterns, paths, concurrency limits
 ```
 
 ## Install
