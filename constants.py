@@ -70,7 +70,7 @@ EXTRACTED_PREFIX: str = "extracted"
 RUNS_PREFIX: str = "runs"
 STAGING_PREFIX: str = "staging"
 
-TELEMETRY_FLUSH_UNITS: int = 100
+TELEMETRY_FLUSH_UNITS: int = 5000
 
 # Publish order for extracted non-page units.
 PUBLISH_ITEM_KINDS = QUESTION_KINDS + ARTEFACT_KINDS
