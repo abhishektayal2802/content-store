@@ -53,6 +53,10 @@ class StageRun:
         self._manifest.activity = name
         await self._flush()
 
+    async def checkpoint(self) -> None:
+        """Write the current stage manifest immediately."""
+        await self._flush()
+
     async def planned(self, count: int) -> None:
         """Record newly discovered planned units."""
         self._manifest.total += count

@@ -7,11 +7,11 @@ NCERT textbook ingestion pipeline: refresh the catalog, mirror raw PDFs to GCS, 
 ```
 content_store/
 ├── catalog.json         # Checked-in catalog snapshot for review
-├── run.py               # Cloud/local stage entrypoint (refresh → scrape → extract → publish)
+├── run.py               # Cloud/local stage entrypoint (refresh → scrape → extract → stage → publish)
 ├── refresh_catalog.py   # Builds the validated run catalog from ncert.nic.in
 ├── scraper.py           # Mirrors NCERT dd.zip chapter PDFs into raw/ GCS
 ├── extractor.py         # Splits raw GCS PDFs, runs OpenAI extraction per page
-├── publisher.py         # Rebuilds Vertex RAG corpora from extracted/ GCS
+├── publisher.py         # Stages import files and rebuilds Vertex RAG corpora
 ├── storage.py           # GCS object naming + content-store state IO
 ├── run_state.py         # GCS stage manifests + structured errors
 ├── units.py             # Cached page → publish-unit projection
@@ -69,6 +69,7 @@ export CONTENT_STORE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 python -m content_store.run refresh
 python -m content_store.run scrape
 python -m content_store.run extract
+python -m content_store.run stage
 python -m content_store.run publish
 ```
 
@@ -76,8 +77,9 @@ Refresh writes the validated catalog to `runs/<run_id>/catalog.json`, and scrape
 reads that run artifact. The scraper downloads exactly one artefact per book:
 the `<code>dd.zip` bundle served by NCERT. It keeps concurrency low, normalizes
 chapter names, and mirrors chapter PDFs into the configured GCS bucket under
-`raw/`. Extraction writes page JSON under `extracted/`. Publish writes
-run-scoped Vertex import files under `runs/<run_id>/staging/`.
+`raw/`. Extraction writes page JSON under `extracted/`. Stage writes run-scoped
+Vertex import files under `runs/<run_id>/staging/`. Publish rebuilds Vertex
+corpora from those staged shard prefixes.
 
 Cloud Run Jobs use the same stage entrypoint:
 
@@ -92,6 +94,7 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 gcloud run jobs execute content-store-refresh --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-scrape --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-extract --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
+gcloud run jobs execute content-store-stage --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 gcloud run jobs execute content-store-publish --region asia-south1 --project sujho-478914 --update-env-vars=CONTENT_STORE_RUN_ID="$RUN_ID" --wait
 ```
 

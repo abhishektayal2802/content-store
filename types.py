@@ -11,7 +11,7 @@ from infra.rag import CorpusKind, build_rag_display_name
 from infra.platform.storage import GcsPath
 
 
-ContentStoreStage = Literal["refresh", "scrape", "extract", "publish"]
+ContentStoreStage = Literal["refresh", "scrape", "extract", "stage", "publish"]
 StageStatus = Literal["running", "succeeded", "failed"]
 
 

@@ -67,6 +67,8 @@ async def _run_stage(
             await Scraper(storage, run_id).run(stage_run)
         case "extract":
             await _run_extract(gcp, storage, stage_run, task_index, task_count)
+        case "stage":
+            await Publisher(storage, run_id).stage(stage_run)
         case "publish":
             await _run_publish(gcp, storage, run_id, stage_run)
 
@@ -96,7 +98,7 @@ async def _run_publish(
     """Run publish with its Vertex writer lifetime scoped here."""
     rag = VertexRagWriter(identity=gcp)
     try:
-        await Publisher(rag, storage, run_id).run(stage_run)
+        await Publisher(storage, run_id).publish(rag, stage_run)
     finally:
         await rag.close()
 

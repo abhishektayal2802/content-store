@@ -18,6 +18,7 @@ from .constants import (
 from .types import (
     Book,
     CachedPage,
+    ContentStoreStage,
     ImportShard,
     RawChapter,
     RunError,
@@ -103,6 +104,13 @@ class ContentStoreStorage:
         )
         await self._upload_model(self._run_object(manifest.run_id, filename), manifest)
 
+    async def require_succeeded_stage(self, run_id: str, stage: ContentStoreStage) -> None:
+        """Fail before destructive work unless the prerequisite stage succeeded."""
+        data = await self._bucket.download_json(self._run_object(run_id, f"{stage}.json"))
+        manifest = StageManifest.model_validate(data)
+        if manifest.status != "succeeded":
+            raise RuntimeError(f"{stage} stage did not succeed: {manifest.status}")
+
     async def append_run_error(self, error: RunError) -> None:
         """Append one structured error line to the run's JSONL error object."""
         object_name = self._run_object(
@@ -119,23 +127,30 @@ class ContentStoreStorage:
         """Upload one publish unit under the run-scoped staging prefix."""
         await self._bucket.upload(object_name, data, content_type)
 
+    async def delete_staging(self, run_id: str) -> None:
+        """Delete the run-scoped staging projection."""
+        await self._bucket.delete_prefix(self._staging_run_prefix(run_id))
+
+    async def list_import_shards(self, run_id: str) -> list[ImportShard]:
+        """List staged Vertex import shard prefixes for one run."""
+        names = await self._bucket.list_prefix(self._staging_run_prefix(run_id))
+        shard_dirs = sorted({self._staged_shard_dir(run_id, name) for name in names})
+        return [
+            self._import_shard_from_dir(run_id, shard_dir)
+            for shard_dir in shard_dirs
+        ]
+
     def staging_object_name(self, run_id: str, corpus: CorpusKind, shard_id: int, basename: str) -> str:
         """GCS object name for one staged Vertex import file."""
         return f"{self._staging_prefix(run_id, corpus, shard_id)}{basename}"
 
-    def import_shard(self, run_id: str, corpus: CorpusKind, shard_id: int) -> ImportShard:
-        """Typed import shard pointing at one staged prefix."""
-        return ImportShard(
-            corpus=corpus,
-            prefix=GcsPath(
-                bucket=self._bucket.name,
-                object_name=self._staging_prefix(run_id, corpus, shard_id),
-            ),
-        )
-
     def _staging_prefix(self, run_id: str, corpus: CorpusKind, shard_id: int) -> str:
         """Run-scoped staging directory consumed by Vertex import."""
-        return f"{RUNS_PREFIX}/{run_id}/{STAGING_PREFIX}/{corpus}-{shard_id:03d}/"
+        return f"{self._staging_run_prefix(run_id)}{corpus}-{shard_id:03d}/"
+
+    def _staging_run_prefix(self, run_id: str) -> str:
+        """Run-scoped staging root."""
+        return f"{RUNS_PREFIX}/{run_id}/{STAGING_PREFIX}/"
 
     def _run_object(self, run_id: str, filename: str) -> str:
         """Object name under one run directory."""
@@ -154,4 +169,21 @@ class ContentStoreStorage:
             book=book,
             chapter=filename.removesuffix(".pdf"),
             object_name=object_name,
+        )
+
+    def _staged_shard_dir(self, run_id: str, object_name: str) -> str:
+        """Parse one staged object name into its shard directory."""
+        rest = object_name.removeprefix(self._staging_run_prefix(run_id))
+        shard_dir, _ = rest.split("/", 1)
+        return shard_dir
+
+    def _import_shard_from_dir(self, run_id: str, shard_dir: str) -> ImportShard:
+        """Build one import shard from a staged shard directory."""
+        corpus, _ = shard_dir.rsplit("-", 1)
+        return ImportShard(
+            corpus=corpus,
+            prefix=GcsPath(
+                bucket=self._bucket.name,
+                object_name=f"{self._staging_run_prefix(run_id)}{shard_dir}/",
+            ),
         )
