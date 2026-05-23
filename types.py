@@ -56,6 +56,7 @@ class StageManifest(BaseModel):
     completed: int
     skipped: int
     failed: int
+    activity: str
     task_index: int
     task_count: int
     started_at: str

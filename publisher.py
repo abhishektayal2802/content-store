@@ -30,9 +30,13 @@ class Publisher:
         if not raw_chapters:
             raise RuntimeError("no raw chapters found")
         await stage.start(0)
+        await stage.activity("staging_publish_units")
         shards = await self._stage(raw_chapters, stage)
+        await stage.activity("deleting_corpora")
         await self._rag.delete_all_corpora()
+        await stage.activity("creating_corpora")
         await self._rag.ensure_corpora()
+        await stage.activity("importing_shards")
         await self._import_shards(shards)
 
     # --- Stage: upload every unit's bytes to its (corpus, shard) GCS prefix ---

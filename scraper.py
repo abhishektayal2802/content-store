@@ -36,6 +36,7 @@ class Scraper:
         """Mirror every catalog book into raw GCS chapter PDFs."""
         books = await self._storage.read_catalog(self._run_id)
         await stage.start(len(books))
+        await stage.activity("scraping_books")
         await asyncio.gather(*[
             self._process(book, stage)
             for book in books

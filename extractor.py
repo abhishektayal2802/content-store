@@ -41,6 +41,7 @@ class Extractor:
         """Extract this Cloud Run task's shard of all raw pages."""
         raw_chapters = await self._storage.list_raw_chapters()
         await stage.start(0)
+        await stage.activity("extracting_pages")
         page_queue: asyncio.Queue[Optional[tuple[PageMeta, bytes]]] = asyncio.Queue(
             maxsize=EXTRACTION_QUEUE_SIZE,
         )

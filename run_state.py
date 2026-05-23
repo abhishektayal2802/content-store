@@ -30,6 +30,7 @@ class StageRun:
             completed=0,
             skipped=0,
             failed=0,
+            activity="starting",
             task_index=task_index,
             task_count=task_count,
             started_at=_now(),
@@ -45,6 +46,11 @@ class StageRun:
     async def start(self, total: int) -> None:
         """Write the initial stage manifest."""
         self._manifest.total = total
+        await self._flush()
+
+    async def activity(self, name: str) -> None:
+        """Record the current stage activity."""
+        self._manifest.activity = name
         await self._flush()
 
     async def planned(self, count: int) -> None:

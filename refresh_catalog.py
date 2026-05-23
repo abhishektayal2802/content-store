@@ -45,6 +45,7 @@ class CatalogRefresher:
         """Refresh NCERT catalog state and write it as a run artifact."""
         candidates = await fetch_catalog()
         await stage.start(len(candidates))
+        await stage.activity("refreshing_catalog")
         books = await validate_catalog(candidates)
         await stage.completed(len(books))
         await stage.skipped(len(candidates) - len(books))
