@@ -8,7 +8,12 @@ import hashlib
 from typing import Optional
 
 from infra.content import PageExtraction, PageMeta
-from infra.llm import InlineMediaContent, OpenAIResponsesClient, OpenAIRuntime, TextContent
+from infra.llm import (
+    InlineDocumentContent,
+    OpenAIResponsesClient,
+    OpenAIRuntime,
+    TextContent,
+)
 from infra.llm.constants import RESPONSE_CONCURRENCY_LIMIT
 from infra.platform.retry import retry
 
@@ -126,13 +131,13 @@ class Extractor:
         """Run one stateless structured extraction call for a single page PDF."""
         encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
 
-        return await self._responses.chat(
+        outputs = await self._responses.chat(
             model=EXTRACTION_MODEL,
             conversation_id=None,
             system_instruction=EXTRACTION_PROMPT,
             input_message=[
                 TextContent(text="Extract this single textbook page."),
-                InlineMediaContent(
+                InlineDocumentContent(
                     data=encoded_pdf,
                     filename=filename,
                 ),
@@ -143,6 +148,7 @@ class Extractor:
             functions=(),
             hosted=(),
         )
+        return outputs.parsed
 
 
 def _task_index(page_key: str, task_count: int) -> int:
