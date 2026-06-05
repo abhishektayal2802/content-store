@@ -5,7 +5,6 @@ from __future__ import annotations
 from infra.content import PageMeta
 from infra.platform.storage import GcsBucket, GcsPath
 from infra.rag import CorpusKind
-from infra.utils.text import slugify
 from pydantic import BaseModel
 
 from .constants import (
@@ -58,18 +57,19 @@ class ContentStoreStorage:
         """Read one raw chapter PDF from GCS."""
         return await self._bucket.download(chapter.object_name)
 
-    async def list_raw_chapters(self) -> list[RawChapter]:
-        """List every mirrored raw chapter PDF."""
+    async def list_raw_chapters(self, books: list[Book]) -> list[RawChapter]:
+        """List every mirrored raw chapter PDF, recovering book titles from the catalog."""
         names = await self._bucket.list_prefix(f"{RAW_PREFIX}/")
+        book_by_key = {(book.grade, book.subject, book.ref.id): book for book in books}
         return [
-            self._raw_chapter_from_name(name)
+            self._raw_chapter_from_name(name, book_by_key)
             for name in names
             if name.endswith(".pdf")
         ]
 
     def raw_chapter_object_name(self, book: Book, chapter: str) -> str:
         """GCS object name for one raw chapter PDF."""
-        return f"{RAW_PREFIX}/{book.grade}/{book.subject}/{slugify(book.title)}/{chapter}.pdf"
+        return f"{RAW_PREFIX}/{book.grade}/{book.subject}/{book.ref.id}/{chapter}.pdf"
 
     # --- Extracted pages ---
 
@@ -89,7 +89,7 @@ class ContentStoreStorage:
     def extracted_page_object_name(self, meta: PageMeta) -> str:
         """GCS object name for one extracted page JSON."""
         return (
-            f"{EXTRACTED_PREFIX}/{meta.grade}/{meta.subject}/{meta.book}/"
+            f"{EXTRACTED_PREFIX}/{meta.grade}/{meta.subject}/{meta.book.id}/"
             f"{meta.chapter}/page-{meta.page:03d}.json"
         )
 
@@ -160,13 +160,18 @@ class ContentStoreStorage:
         """Serialize one Pydantic model as a JSON object."""
         await self._bucket.upload_json(object_name, model.model_dump(mode="json"))
 
-    def _raw_chapter_from_name(self, object_name: str) -> RawChapter:
+    def _raw_chapter_from_name(
+        self,
+        object_name: str,
+        book_by_key: dict[tuple[int, str, str], Book],
+    ) -> RawChapter:
         """Parse `raw/<grade>/<subject>/<book>/<chapter>.pdf` into a RawChapter."""
-        _, grade, subject, book, filename = object_name.split("/", 4)
+        _, grade, subject, book_id, filename = object_name.split("/", 4)
+        book = book_by_key[(int(grade), subject, book_id)]
         return RawChapter(
             grade=int(grade),
-            subject=subject,
-            book=book,
+            subject=book.subject,
+            book=book.ref,
             chapter=filename.removesuffix(".pdf"),
             object_name=object_name,
         )

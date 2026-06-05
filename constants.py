@@ -47,7 +47,7 @@ BOOK_OPTION_PATTERN = re.compile(
 ZIP_CONCURRENCY: int = 3
 
 # NCERT zip entries: "<book.code><suffix>.pdf". Chapter stems are normalized
-# to human-readable names (e.g. "chapter-03") so retrieval filters are
+# to stable ids (e.g. "chapter-03") so retrieval filters are
 # predictable across books. Unknown suffixes pass through unchanged.
 NCERT_CHAPTER_NUM_RE = re.compile(r"^\d{2}$")
 NCERT_APPENDIX_RE = re.compile(r"^a(\d+)$")

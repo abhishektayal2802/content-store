@@ -6,9 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from infra.content import PageExtraction, PageMeta
+from infra.content import ContentRef, PageExtraction, PageMeta
 from infra.rag import CorpusKind, build_rag_display_name
 from infra.platform.storage import GcsPath
+from infra.utils.text import slugify
 
 
 ContentStoreStage = Literal["refresh", "scrape", "extract", "stage", "publish"]
@@ -23,6 +24,11 @@ class Book(BaseModel):
     title: str
     # NCERT asset code (e.g. "iebe1") used to derive the dd.zip URL.
     code: str
+
+    @property
+    def ref(self) -> ContentRef:
+        """Book provenance ref: stable slug id + the non-derivable display title."""
+        return ContentRef(id=slugify(self.title), title=self.title)
 
 
 class CachedPage(BaseModel):
@@ -41,7 +47,7 @@ class RawChapter(BaseModel):
 
     grade: int
     subject: str
-    book: str
+    book: ContentRef
     chapter: str
     object_name: str
 

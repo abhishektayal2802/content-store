@@ -25,7 +25,8 @@ class Publisher:
 
     async def stage(self, stage: StageRun) -> None:
         """Stage every publish unit into run-scoped GCS prefixes."""
-        raw_chapters = await self._storage.list_raw_chapters()
+        books = await self._storage.read_catalog(self._run_id)
+        raw_chapters = await self._storage.list_raw_chapters(books)
         if not raw_chapters:
             raise RuntimeError("no raw chapters found")
         await stage.start(0)
@@ -54,7 +55,7 @@ class Publisher:
         """Stage all Vertex import units without mutating existing corpora."""
         counts: dict[CorpusKind, int] = defaultdict(int)
         async with asyncio.TaskGroup() as tg:
-            for chapter in sorted(chapters, key=lambda c: (c.grade, c.subject, c.book, c.chapter)):
+            for chapter in sorted(chapters, key=lambda c: (c.grade, c.subject, c.book.id, c.chapter)):
                 for unit, data in await self._prepare_chapter(chapter, stage):
                     # Sequential fill: new shard every MAX_FILES_PER_SHARD units per corpus.
                     shard_id = counts[unit.corpus] // MAX_FILES_PER_SHARD
