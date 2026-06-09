@@ -84,7 +84,7 @@ class RunError(BaseModel):
 class PublishUnit(BaseModel):
     """Smallest filter-preserving retrieval unit: one RagFile to publish.
 
-    `source_id` is the retrieval contract (= SourceRef.source_id). Vertex
+    `source_id` is the retrieval contract (= SourceRef.to_source_id). Vertex
     exposes the staged file as `RagFile.display_name = object_basename` after
     a GCS import, so retrieval strips `suffix` to recover the pure source id.
     """

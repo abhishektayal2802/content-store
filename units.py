@@ -69,7 +69,7 @@ class UnitBuilder:
                 provenance=meta,
                 difficulty=difficulty,
                 item_index=item_index,
-            ).source_id(),
+            ).to_source_id(),
             suffix=suffix,
             content_type=content_type,
         )
